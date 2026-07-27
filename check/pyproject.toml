@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jejune-catalog-check"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["click>=8.0", "pyyaml>=6.0"]
+
+[project.entry-points."jejune.plugins"]
+catalog = "jejune_catalog_check.plugin:plugin"
