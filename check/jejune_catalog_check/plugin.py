@@ -32,21 +32,10 @@ _CONFIG_VAR = "JEJUNE_ROOT_DIR"
 def _catalog_config_status() -> tuple[str, str]:
     """Return (status, raw_msg) for catalog configuration."""
     val = os.environ.get("JEJUNE_ROOT_DIR")
-    root_valid = bool(val) and _PLACEHOLDER not in val
-    cat_exists = (dot_jejune() / "catalog.yaml").exists()
-    if not root_valid and not cat_exists:
-        msg = (
-            "JEJUNE_ROOT_DIR not configured; catalog.yaml missing"
-            if not val else
-            "JEJUNE_ROOT_DIR has placeholder value; catalog.yaml missing"
-        )
-        return "error", msg
-    if not root_valid:
-        if not val:
-            return "warn", "JEJUNE_ROOT_DIR not configured"
+    if not val:
+        return "warn", "JEJUNE_ROOT_DIR not configured"
+    if _PLACEHOLDER in val:
         return "error", "JEJUNE_ROOT_DIR has placeholder value"
-    if not cat_exists:
-        return "error", "catalog.yaml missing"
     return "ok", ""
 
 
@@ -270,7 +259,7 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     (or all when ROOT_DIR is unset) are cloned into .jejune/tmp/ which is
     gitignored automatically.
 
-    For each repository, doc.yaml is parsed and every file it references is
+    For each repository, catalog.yaml is parsed and every file it references is
     checked for existence. Exits with a non-zero status if any check fails.
     """
     from jejune_cli.test import _check_doc_yaml, _tmp_dir
@@ -278,13 +267,9 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     if catalog_file is None:
         catalog_file = os.environ.get("JEJUNE_CATALOG")
     if catalog_file is None:
-        default = dot_jejune() / "catalog.yaml"
-        if not default.exists():
-            raise click.ClickException(
-                "No catalog specified. Set $JEJUNE_CATALOG, pass CATALOG_FILE, "
-                "or run `jejune configure init` to create .jejune/catalog.yaml."
-            )
-        catalog_file = str(default)
+        raise click.ClickException(
+            "No catalog specified. Set $JEJUNE_CATALOG or pass CATALOG_FILE."
+        )
 
     root = Path(root_dir) if root_dir else None
     if root is not None and not root.exists():
@@ -383,14 +368,7 @@ def hint_config():
     if status == "ok":
         click.echo(click.style("catalog is configured", fg="green"))
         return
-    env_issue = "JEJUNE_ROOT_DIR" in msg
-    cat_issue = "catalog.yaml" in msg
-    if env_issue and cat_issue:
-        click.echo("edit .jejune/env-config and .jejune/catalog.yaml")
-    elif env_issue:
-        click.echo("edit .jejune/env-config (set JEJUNE_ROOT_DIR)")
-    else:
-        click.echo("edit .jejune/catalog.yaml")
+    click.echo("edit .jejune/env-config (set JEJUNE_ROOT_DIR)")
 
 
 @catalog_group.command("status-availability")
@@ -416,8 +394,8 @@ def hint_availability():
 @catalog_group.command("check")
 @click.option(
     "--catalog", "catalog_path",
-    default=None, type=click.Path(),
-    help="Path to catalog.yaml (default: .jejune/catalog.yaml).",
+    required=True, type=click.Path(),
+    help="Path to catalog.yaml.",
 )
 @click.option(
     "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
@@ -428,7 +406,7 @@ def check(catalog_path, root_dir):
     cfg_status, hint = component_config_check("catalog")
     if cfg_status == "error":
         raise click.ClickException(f"not configured — {hint}")
-    cat_path = Path(catalog_path) if catalog_path else dot_jejune() / "catalog.yaml"
+    cat_path = Path(catalog_path)
     root = Path(root_dir) if root_dir else None
     results = _check_catalog_impl(cat_path, root)
     all_ok = True
@@ -444,8 +422,8 @@ def check(catalog_path, root_dir):
 @catalog_group.command("sync")
 @click.option(
     "--catalog", "catalog_path",
-    default=None, type=click.Path(),
-    help="Path to catalog.yaml (default: .jejune/catalog.yaml).",
+    required=True, type=click.Path(),
+    help="Path to catalog.yaml.",
 )
 @click.option(
     "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
@@ -459,7 +437,7 @@ def sync(catalog_path, root_dir, do_add):
         raise click.ClickException(
             "JEJUNE_ROOT_DIR is not set. Use --root-dir or set the env var."
         )
-    cat_path = Path(catalog_path) if catalog_path else dot_jejune() / "catalog.yaml"
+    cat_path = Path(catalog_path)
     results = _sync_catalog_impl(cat_path, Path(root_dir), do_add)
     for name, ok, msg in results:
         if ok:
@@ -476,13 +454,15 @@ def sync(catalog_path, root_dir, do_add):
     help="Directory holding jejune_doc_* clones (default: $JEJUNE_ROOT_DIR).",
 )
 def check_deployment(deployment_path, root_dir):
-    """Validate a deployment directory against catalog.yaml.
+    """Validate a deployment directory against full-catalog.yaml.
 
-    DEPLOYMENT_PATH is the path to a jj_deployments/deploy_*/ directory.
+    DEPLOYMENT_PATH is the path to a jejune_deployments/deploy_*/ directory.
+    The reference catalog is resolved from the sibling jejune_catalog/ repo.
     """
     dep_path = Path(deployment_path)
     root = Path(root_dir) if root_dir else None
-    results = _check_deployment_impl(dep_path, dot_jejune() / "catalog.yaml", root)
+    full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
+    results = _check_deployment_impl(dep_path, full_cat, root)
     all_ok = True
     for item, ok, msg in results:
         status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
@@ -573,7 +553,7 @@ catalog_role = JejuneRole(
     help_stage="collection",
     order=20,
     config_group=curator_config_group,
-    extend_includes={"deployer": ("catalog-contributor",)},
+    extend_includes={"doc-steward": ("catalog-contributor",)},
 )
 
 
@@ -587,7 +567,7 @@ plugin = JejunePlugin(
     name="catalog",
     group=catalog_group,
     config_vars=[_CONFIG_VAR],
-    config_hint="edit .jejune/env-config or .jejune/catalog.yaml",
+    config_hint="edit .jejune/env-config (set JEJUNE_ROOT_DIR)",
     avail_hint="run `gh auth login` to authenticate the GitHub CLI",
     check_availability=_check_availability,
     stage="collection",
