@@ -10,3 +10,7 @@ dependencies = ["click>=8.0", "pyyaml>=6.0"]
 
 [project.entry-points."jejune.plugins"]
 catalog = "jejune_catalog_check.plugin:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jejune_catalog_check"]
+include = ["jejune_catalog_check/templates/**"]
