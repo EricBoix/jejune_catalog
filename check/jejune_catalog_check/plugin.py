@@ -6,6 +6,7 @@ and a configuration init subcommand.
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -445,6 +446,68 @@ def sync(catalog_path, root_dir, do_add):
         else:
             status = click.style(msg, fg="yellow" if "private" in msg else "red")
         click.echo(f"  {name:<45} {status}")
+
+
+@catalog_group.command("slug")
+@click.argument("doc_catalog", type=click.Path(exists=True))
+@click.option(
+    "--full-catalog", "full_catalog_path",
+    default=None, type=click.Path(),
+    help="Path to full-catalog.yaml (default: $JEJUNE_ROOT_DIR/jejune_catalog/full-catalog.yaml).",
+)
+@click.option(
+    "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
+    help="Root dir holding side-by-side jejune_* clones (default: $JEJUNE_ROOT_DIR).",
+)
+def slug(doc_catalog, full_catalog_path, root_dir):
+    """Compute a unique doc_name slug from a doc_*/catalog.yaml.
+
+    DOC_CATALOG is the path to the document's catalog.yaml.
+
+    The slug is derived from the document's title (extended with author or isbn
+    only when needed for uniqueness). The full-catalog.yaml is consulted to
+    guarantee uniqueness. No files are written.
+    """
+    doc = yaml.safe_load(Path(doc_catalog).read_text())
+    title = doc.get("title", "")
+    authors = doc.get("authors", [])
+    isbn = doc.get("isbn") or ""
+
+    if full_catalog_path:
+        full_cat = Path(full_catalog_path)
+    elif root_dir:
+        full_cat = Path(root_dir) / "jejune_catalog" / "full-catalog.yaml"
+    else:
+        full_cat = Path.cwd() / "full-catalog.yaml"
+
+    existing: set[str] = set()
+    if full_cat.exists():
+        for entry in yaml.safe_load(full_cat.read_text()).get("documents", []):
+            if "doc_name" in entry:
+                existing.add(entry["doc_name"])
+
+    def _slugify(text: str) -> str:
+        s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+        return re.sub(r"-{2,}", "-", s)
+
+    # Use main title only (before first colon or em-dash) for a shorter base slug.
+    main_title = re.split(r"[:—]", title, maxsplit=1)[0].strip()
+    first_author = authors[0] if authors else ""
+    candidates = [
+        _slugify(main_title),
+        _slugify(f"{main_title} {first_author}") if first_author else None,
+        _slugify(f"{main_title} {first_author} {isbn}") if first_author or isbn else None,
+        _slugify(f"{title} {first_author} {isbn}"),  # full title fallback
+    ]
+
+    for candidate in candidates:
+        if candidate and candidate not in existing:
+            click.echo(candidate)
+            return
+
+    raise click.ClickException(
+        "Could not generate a unique slug — all candidates already exist in full-catalog.yaml."
+    )
 
 
 @catalog_group.command("check-deployment")
