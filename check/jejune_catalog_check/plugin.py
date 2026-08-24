@@ -24,6 +24,7 @@ from jejune_cli.ecosystem import register_role_repos
 
 _PLACEHOLDER = "_CHANGE_ME"
 _CONFIG_VAR = "JEJUNE_ROOT_DIR"
+_REPO_NAME = "jejune_catalog"
 
 
 # ---------------------------------------------------------------------------
@@ -32,30 +33,46 @@ _CONFIG_VAR = "JEJUNE_ROOT_DIR"
 
 def _catalog_config_status() -> tuple[str, str]:
     """Return (status, raw_msg) for catalog configuration."""
-    val = os.environ.get("JEJUNE_ROOT_DIR")
+    val = os.environ.get(_CONFIG_VAR)
     if not val:
-        return "warn", "JEJUNE_ROOT_DIR not configured"
+        return "warn", f"{_CONFIG_VAR} not configured"
     if _PLACEHOLDER in val:
-        return "error", "JEJUNE_ROOT_DIR has placeholder value"
+        return "warn", f"{_CONFIG_VAR} has placeholder value"
     return "ok", ""
 
 
 def _check_availability() -> tuple[bool, str]:
-    status, msg = _catalog_config_status()
-    if status == "error":
-        return False, msg
+    """Return (ok, msg) for catalog availability.
+
+    Tier 1: full-catalog.yaml present under JEJUNE_ROOT_DIR.
+    Tier 2: already cloned into .jejune/tmp/.
+    Tier 3: shallow-clone the public repo into .jejune/tmp/.
+    Error only when both a local copy and the clone attempt fail.
+    """
+    from jejune_cli._ecosystem import REPO_ROOT_DIR
+
+    raw_root = os.environ.get(_CONFIG_VAR, "")
+    if raw_root and _PLACEHOLDER not in raw_root:
+        if (Path(raw_root) / _REPO_NAME / "full-catalog.yaml").exists():
+            return True, f"full-catalog.yaml found under {_CONFIG_VAR}"
+
+    if (dot_jejune() / "tmp" / _REPO_NAME / "full-catalog.yaml").exists():
+        return True, "full-catalog.yaml available via .jejune/tmp"
+
+    clone_dest = dot_jejune() / "tmp" / _REPO_NAME
     try:
+        clone_dest.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
-            ["gh", "auth", "status"],
-            capture_output=True, text=True, timeout=10,
+            ["git", "clone", "--depth=1",
+             f"{REPO_ROOT_DIR}/{_REPO_NAME}", str(clone_dest)],
+            capture_output=True, text=True, timeout=60,
         )
-        if result.returncode != 0:
-            return False, "gh CLI not authenticated"
-    except FileNotFoundError:
-        return False, "gh CLI not found"
+        if result.returncode == 0:
+            return True, f"cloned {_REPO_NAME} into .jejune/tmp"
     except subprocess.TimeoutExpired:
-        return False, "gh auth status timed out"
-    return True, "gh CLI authenticated"
+        pass
+
+    return False, f"could not access {_REPO_NAME} locally or via git clone"
 
 
 # ---------------------------------------------------------------------------
@@ -629,9 +646,7 @@ register_role_repos("catalog-contributor", [("jejune_catalog", None, None)])
 plugin = JejunePlugin(
     name="catalog",
     group=catalog_group,
-    config_vars=[_CONFIG_VAR],
-    config_hint="edit .jejune/env-config (set JEJUNE_ROOT_DIR)",
-    avail_hint="run `gh auth login` to authenticate the GitHub CLI",
+    avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
     check_availability=_check_availability,
     stage="collection",
     role=catalog_role,
