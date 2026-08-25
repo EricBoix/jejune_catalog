@@ -1,8 +1,14 @@
-"""jejune_cli plugin for the Catalog Curator role.
+"""jejune_cli plugin for catalog roles.
 
-Registers the catalog-contributor role and provides catalog management commands:
-check/sync/check-deployment (collection-level), test/sample (basic utilities),
-and a configuration init subcommand.
+Registers two roles:
+- doc-catalog-contributor (abstract): doc-level catalog.yaml validation, inherited by
+  doc-steward and collection-catalog-contributor.
+- collection-catalog-contributor: manages collection-level catalogs (full-catalog.yaml,
+  deployments).  Replaces the former catalog-contributor role.
+
+Commands visible per role:
+  doc-steward / doc-catalog-contributor : catalog check (doc-level)
+  collection-catalog-contributor        : all catalog commands
 """
 
 import os
@@ -20,6 +26,8 @@ from jejune_cli.plugin import JejunePlugin, JejuneRole
 from jejune_cli._env import dot_jejune
 from jejune_cli.configuration import component_config_check
 from jejune_cli.ecosystem import register_role_repos
+from jejune_cli.next_steps import HeuristicStep, register_heuristic
+from jejune_cli.role import detect_role as _detect_role, register_role as _register_role
 
 
 _PLACEHOLDER = "_CHANGE_ME"
@@ -241,12 +249,52 @@ def _sync_catalog_impl(
 
 
 # ---------------------------------------------------------------------------
-# Click command group
+# Click command group (role-aware)
 # ---------------------------------------------------------------------------
 
-@click.group("catalog", short_help="Manage the document catalog")
+_COLLECTION_ONLY: frozenset[str] = frozenset({
+    "sync", "check-deployment", "test", "slug", "sample",
+    "status-config", "hint-config", "status-availability", "hint-availability",
+})
+
+_COLLECTION_ROLE = "collection-catalog-contributor"
+
+
+class _CatalogGroup(click.Group):
+    """Catalog command group that hides and blocks collection-only commands for non-collection roles."""
+
+    def _is_collection_role(self) -> bool:
+        active_role, _ = _detect_role()
+        return active_role == _COLLECTION_ROLE
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        is_collection = self._is_collection_role()
+        commands = []
+        for name in self.list_commands(ctx):
+            if not is_collection and name in _COLLECTION_ONLY:
+                continue
+            cmd = self.get_command(ctx, name)
+            if cmd and not cmd.hidden:
+                commands.append((name, cmd))
+        if commands:
+            with formatter.section("Commands"):
+                formatter.write_dl(
+                    [(name, cmd.get_short_help_str(limit=formatter.width))
+                     for name, cmd in commands]
+                )
+
+    def invoke(self, ctx: click.Context) -> object:
+        cmd_name = ctx._protected_args[0] if ctx._protected_args else None
+        if cmd_name in _COLLECTION_ONLY and not self._is_collection_role():
+            raise click.ClickException(
+                f"'{cmd_name}' is only available for the {_COLLECTION_ROLE} role."
+            )
+        return super().invoke(ctx)
+
+
+@click.group("catalog", cls=_CatalogGroup, short_help="Manage the document catalog")
 def catalog_group():
-    """Manage the catalog of jejune_doc_* repositories (collection-level)."""
+    """Manage the catalog of jejune_doc_* repositories."""
 
 
 @catalog_group.command("test")
@@ -412,29 +460,66 @@ def hint_availability():
 @catalog_group.command("check")
 @click.option(
     "--catalog", "catalog_path",
-    required=True, type=click.Path(),
-    help="Path to catalog.yaml.",
+    required=False, default=None, type=click.Path(),
+    help="Collection catalog path. If omitted, validates the current directory's catalog.yaml.",
 )
 @click.option(
     "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
     help="Directory holding jejune_doc_* clones (default: $JEJUNE_ROOT_DIR).",
 )
-def check(catalog_path, root_dir):
-    """Verify catalog.yaml against GitHub visibility and local clones."""
-    cfg_status, hint = component_config_check("catalog")
-    if cfg_status == "error":
-        raise click.ClickException(f"not configured — {hint}")
-    cat_path = Path(catalog_path)
-    root = Path(root_dir) if root_dir else None
-    results = _check_catalog_impl(cat_path, root)
-    all_ok = True
-    for name, ok, msg in results:
-        status = click.style("ok", fg="green") if ok else click.style(msg, fg="red")
-        click.echo(f"  {name:<45} {status}")
-        if not ok:
-            all_ok = False
-    if not all_ok:
-        raise SystemExit(1)
+@click.option(
+    "--verbose", "-v", is_flag=True, default=False,
+    help="Print file references (doc-level mode only).",
+)
+def check(catalog_path, root_dir, verbose):
+    """Validate a catalog.
+
+    Without --catalog: validates the current directory's catalog.yaml (doc-level).
+    With --catalog PATH: verifies a collection catalog against GitHub visibility and
+    local clones (collection-catalog-contributor only).
+    """
+    if catalog_path is None:
+        # Doc-level mode: validate the current repo's catalog.yaml.
+        from jejune_cli.test import _check_doc_yaml
+        errors, file_refs = _check_doc_yaml(Path.cwd())
+        if errors:
+            for err in errors:
+                click.echo(f"  {click.style(err, fg='red')}")
+            n = len([e for e in errors if "see " not in e])
+            click.echo(click.style(f"catalog.yaml — {n} error(s)", fg="red"))
+            sys.exit(1)
+        else:
+            if verbose and file_refs:
+                key_width = max(len(k) for k, _ in file_refs)
+                for key, rel in file_refs:
+                    click.echo(f"  {key:<{key_width}}  {rel}")
+            click.echo(click.style("catalog.yaml — ok", fg="green"))
+    else:
+        # Collection-level mode: check each catalog entry.
+        active_role, _ = _detect_role()
+        if active_role != _COLLECTION_ROLE:
+            raise click.ClickException(
+                f"--catalog is only available for the {_COLLECTION_ROLE} role."
+            )
+        cfg_status, hint = component_config_check("catalog")
+        if cfg_status == "error":
+            raise click.ClickException(f"not configured — {hint}")
+        cat_path = Path(catalog_path)
+        root = Path(root_dir) if root_dir else None
+        results = _check_catalog_impl(cat_path, root)
+        if not results:
+            click.echo(click.style("no documents found in catalog — wrong file?", fg="yellow"))
+            return
+        all_ok = True
+        for name, ok, msg in results:
+            status = click.style("ok", fg="green") if ok else click.style(msg, fg="red")
+            click.echo(f"  {name:<45} {status}")
+            if not ok:
+                all_ok = False
+        if all_ok:
+            click.echo(click.style(f"{len(results)} document(s) — all ok.", fg="green"))
+        else:
+            sys.exit(1)
 
 
 @catalog_group.command("sync")
@@ -563,7 +648,7 @@ _ECOSYSTEM_TEMPLATE = Path(__file__).parent / "templates" / "ecosystem-env-confi
 
 @click.command("init")
 def curator_init() -> None:
-    """Write catalog-contributor scaffold files into .jejune/ in the current directory.
+    """Write collection-catalog-contributor scaffold files into .jejune/ in the current directory.
 
     Creates .jejune/role and .jejune/ecosystem-env-config from built-in templates.
     Adds .jejune to .gitignore so the whole directory stays local by default.
@@ -604,36 +689,74 @@ def curator_init() -> None:
     print_next_steps()
 
 
-@click.group("catalog-contributor", short_help="Catalog-contributor role workspace")
+@click.group("collection-catalog-contributor", short_help="Collection-catalog-contributor role workspace")
 def curator_config_group():
-    """Initialise and inspect the catalog-contributor workspace."""
+    """Initialise and inspect the collection-catalog-contributor workspace."""
 
 
 curator_config_group.add_command(curator_init, "init")
 
 
 # ---------------------------------------------------------------------------
-# Role definition
+# Role definitions
 # ---------------------------------------------------------------------------
 
-def _detect_catalog_contributor() -> bool:
+def _detect_collection_catalog_contributor() -> bool:
     try:
         return Path.cwd().joinpath("full-catalog.yaml").exists()
     except Exception:
         return False
 
 
-catalog_role = JejuneRole(
-    name="catalog-contributor",
+# Abstract role: never auto-detected; inherited by doc-steward and
+# collection-catalog-contributor to share doc-level catalog commands.
+_doc_catalog_contributor_role = JejuneRole(
+    name="doc-catalog-contributor",
     components=frozenset({"catalog"}),
     includes=("contributor",),
+    detection_reason="inherited by doc-steward and collection-catalog-contributor",
+    section_title="Doc-catalog-contributor commands",
+    detect=lambda: False,
+    help_stage="single-document",
+    order=15,
+    abstract=True,
+    extend_includes={"doc-steward": ("doc-catalog-contributor",)},
+)
+_register_role(_doc_catalog_contributor_role)
+
+catalog_role = JejuneRole(
+    name="collection-catalog-contributor",
+    components=frozenset({"catalog"}),
+    includes=("doc-catalog-contributor",),
     detection_reason="full-catalog.yaml detected",
-    section_title="Catalog-contributor commands",
-    detect=_detect_catalog_contributor,
+    section_title="Collection-catalog-contributor commands",
+    detect=_detect_collection_catalog_contributor,
     help_stage="collection",
     order=20,
     config_group=curator_config_group,
-    extend_includes={"doc-steward": ("catalog-contributor",)},
+)
+
+
+# ---------------------------------------------------------------------------
+# Heuristic registration
+# ---------------------------------------------------------------------------
+
+def _doc_catalog_has_errors() -> bool:
+    try:
+        from jejune_cli.test import _check_doc_yaml
+        errors, _ = _check_doc_yaml(Path.cwd())
+        return bool(errors)
+    except Exception:
+        return False
+
+
+register_heuristic(
+    HeuristicStep(
+        label="Fix document catalog",
+        command="jejune catalog check",
+        conditions=[_doc_catalog_has_errors],
+    ),
+    roles={"doc-steward", "doc-catalog-contributor", "collection-catalog-contributor"},
 )
 
 
@@ -641,7 +764,7 @@ catalog_role = JejuneRole(
 # Plugin registration
 # ---------------------------------------------------------------------------
 
-register_role_repos("catalog-contributor", [("jejune_catalog", None, None)])
+register_role_repos("collection-catalog-contributor", [("jejune_catalog", None, None)])
 
 plugin = JejunePlugin(
     name="catalog",
