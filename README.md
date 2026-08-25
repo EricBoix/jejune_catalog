@@ -8,7 +8,7 @@ Home of the Catalog Curator role in the jejune ecosystem.
 |------|---------|
 | `full-catalog.yaml` | Canonical reference of all known `jj_doc_*` repositories |
 | `Doc/` | Curator working space (notes, steward communications) |
-| `check/` | `jejune_cli` plugin providing catalog commands and health check |
+| `jejune_catalog/` | `jejune_cli` plugin providing catalog commands and health check |
 
 ## full-catalog.yaml
 
@@ -22,7 +22,7 @@ Fields per entry: `name`, `url`, `public`.
 Install once (requires `jejune_cli`):
 
 ```sh
-pip install -e check/
+pip install -e .
 ```
 
 This registers the `catalog` command group with `jejune`:
@@ -36,7 +36,7 @@ jejune catalog check-deployment /path/to/deploy_name
 Run standalone (without going through `jejune`):
 
 ```sh
-python -m jejune_catalog_check check
+python -m jejune_catalog check
 ```
 
 Once installed, `jejune doctor` reports catalog health when run from a
