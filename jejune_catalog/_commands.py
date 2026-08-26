@@ -26,7 +26,7 @@ from ._impl import (
 
 
 _COLLECTION_ONLY: frozenset[str] = frozenset({
-    "sync", "check-deployment", "test", "slug", "sample",
+    "sync", "check-deployment", "test", "sample",
     "status-config", "hint-config", "status-availability", "hint-availability",
 })
 
