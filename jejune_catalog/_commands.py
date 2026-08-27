@@ -132,8 +132,7 @@ def check(catalog_path, root_dir, verbose):
             # Deployment-catalog mode: auto-dispatch to the deployment check.
             dep_path = Path.cwd()
             full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
-            root = Path(root_dir) if root_dir else None
-            results = _check_deployment_impl(dep_path, full_cat, root)
+            results = _check_deployment_impl(dep_path, full_cat)
             all_ok = True
             for item, ok, msg in results:
                 status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
@@ -446,20 +445,15 @@ def slug(doc_catalog, full_catalog_path, root_dir):
 
 @catalog_group.command("check-deployment")
 @click.argument("deployment_path", type=click.Path(exists=True))
-@click.option(
-    "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
-    help="Directory holding jejune_doc_* clones (default: $JEJUNE_ROOT_DIR).",
-)
-def check_deployment(deployment_path, root_dir):
+def check_deployment(deployment_path):
     """Validate a deployment directory against full-catalog.yaml.
 
     DEPLOYMENT_PATH is the path to a jejune_deployments/deploy_*/ directory.
     The reference catalog is resolved from the sibling jejune_catalog/ repo.
     """
     dep_path = Path(deployment_path)
-    root = Path(root_dir) if root_dir else None
     full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
-    results = _check_deployment_impl(dep_path, full_cat, root)
+    results = _check_deployment_impl(dep_path, full_cat)
     all_ok = True
     for item, ok, msg in results:
         status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")

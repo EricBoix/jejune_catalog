@@ -135,9 +135,8 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
 def _check_deployment_impl(
     deployment_path: Path,
     catalog_ref: Path,
-    root_dir: Path | None,
 ) -> list[tuple[str, bool, str]]:
-    """Validate a deployment directory; return (item, ok, message)."""
+    """Validate a deployment catalog; return (item, ok, message)."""
     results: list[tuple[str, bool, str]] = []
 
     f = deployment_path / "catalog.yaml"
@@ -157,15 +156,12 @@ def _check_deployment_impl(
         url = doc["url"].rstrip("/")
         issues: list[str] = []
 
-        if root_dir is None:
-            issues.append("JEJUNE_ROOT_DIR not set")
-        elif not (root_dir / name).is_dir():
-            issues.append(f"not cloned under {root_dir}")
-
         if name in ref_docs:
             ref_url = ref_docs[name]["url"].rstrip("/")
             if url != ref_url:
                 issues.append(f"URL drift: deployment={url!r}, reference={ref_url!r}")
+        elif ref_docs:
+            issues.append("not found in reference catalog")
 
         label = "public" if doc.get("public") else "private"
         results.append((
