@@ -92,6 +92,20 @@ class _CatalogGroup(click.Group):
         return super().invoke(ctx)
 
 
+def _print_deployment_results(results: list[tuple[str, bool, str]]) -> bool:
+    """Print check-deployment results; return True if all ok."""
+    all_ok = True
+    for item, ok, msg in results:
+        status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
+        if item == "catalog.yaml":
+            click.echo(f"  {item:<45} {status}")
+        else:
+            click.echo(f"    • {item:<41} {status}")
+        if not ok:
+            all_ok = False
+    return all_ok
+
+
 @click.group("catalog", cls=_CatalogGroup, short_help="Manage the document catalog")
 def catalog_group():
     """Manage the catalog of jejune_doc_* repositories."""
@@ -133,13 +147,7 @@ def check(catalog_path, root_dir, verbose):
             dep_path = Path.cwd()
             full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
             results = _check_deployment_impl(dep_path, full_cat)
-            all_ok = True
-            for item, ok, msg in results:
-                status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
-                click.echo(f"  {item:<45} {status}")
-                if not ok:
-                    all_ok = False
-            if not all_ok:
+            if not _print_deployment_results(results):
                 sys.exit(1)
         else:
             # Doc-level mode: validate the current repo's catalog.yaml.
@@ -454,11 +462,5 @@ def check_deployment(deployment_path):
     dep_path = Path(deployment_path)
     full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
     results = _check_deployment_impl(dep_path, full_cat)
-    all_ok = True
-    for item, ok, msg in results:
-        status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
-        click.echo(f"  {item:<45} {status}")
-        if not ok:
-            all_ok = False
-    if not all_ok:
+    if not _print_deployment_results(results):
         raise SystemExit(1)

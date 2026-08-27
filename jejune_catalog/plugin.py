@@ -90,11 +90,20 @@ catalog_role = JejuneRole(
 
 def _doc_catalog_has_errors() -> bool:
     try:
+        import yaml
         from jejune_cli.test import _check_doc_yaml
+        doc_yaml = Path.cwd() / "catalog.yaml"
+        if doc_yaml.exists() and "documents" in (yaml.safe_load(doc_yaml.read_text()) or {}):
+            return False  # deployment catalog, not a doc catalog
         errors, _ = _check_doc_yaml(Path.cwd())
         return bool(errors)
     except Exception:
         return False
+
+
+def _catalog_is_available() -> bool:
+    ok, _ = _check_availability()
+    return ok
 
 
 register_heuristic(
@@ -102,6 +111,7 @@ register_heuristic(
         label="Fix document catalog",
         command="jejune catalog check",
         conditions=[_doc_catalog_has_errors],
+        anti_conditions=[_catalog_is_available],
     ),
     roles={"doc-steward", "doc-catalog-contributor", "collection-catalog-contributor"},
 )
