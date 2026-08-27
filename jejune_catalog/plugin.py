@@ -1,14 +1,16 @@
 """jejune_cli plugin for catalog roles.
 
-Registers two roles and wires them into the jejune plugin system:
+Registers three roles and wires them into the jejune plugin system:
 
 - doc-catalog-contributor (abstract): doc-level catalog.yaml validation,
   inherited by doc-steward and collection-catalog-contributor.
+- deployment-catalog (abstract): deployment catalog checking, inherited by deployer.
 - collection-catalog-contributor: manages collection-level catalogs
   (full-catalog.yaml, deployments). Replaces the former catalog-contributor role.
 
 Command visibility:
   doc-steward / doc-catalog-contributor : catalog check (doc-level)
+  deployer / deployment-catalog         : catalog check-deployment
   collection-catalog-contributor        : all catalog commands
 
 Module layout:
@@ -23,7 +25,7 @@ from pathlib import Path
 from jejune_cli.ecosystem import register_role_repos
 from jejune_cli.next_steps import HeuristicStep, register_heuristic
 from jejune_cli.plugin import JejunePlugin, JejuneRole
-from jejune_cli.role import register_role as _register_role
+from jejune_cli.role import register_role as _register_role, register_role_help_section as _register_role_help_section
 
 from ._commands import catalog_group
 from ._config_group import curator_config_group
@@ -49,6 +51,25 @@ _doc_catalog_contributor_role = JejuneRole(
     extend_includes={"doc-steward": ("doc-catalog-contributor",)},
 )
 _register_role(_doc_catalog_contributor_role)
+
+# Abstract role: never auto-detected; inherited by deployer to grant access to
+# check-deployment. collection-catalog-contributor is handled by an explicit allow
+# in _commands._CatalogGroup, so it does NOT inherit deployment-catalog — this
+# avoids a duplicate catalog section in collection-catalog-contributor --help.
+_deployment_catalog_role = JejuneRole(
+    name="deployment-catalog",
+    components=frozenset({"catalog"}),
+    includes=("contributor",),
+    detection_reason="inherited by deployer",
+    section_title="Deployment-catalog commands",
+    detect=lambda: False,
+    help_stage="collection",
+    order=95,
+    abstract=True,
+    extend_includes={"deployer": ("deployment-catalog",)},
+)
+_register_role(_deployment_catalog_role)
+_register_role_help_section("deployment-catalog", stage="collection", order=95)
 
 catalog_role = JejuneRole(
     name="collection-catalog-contributor",

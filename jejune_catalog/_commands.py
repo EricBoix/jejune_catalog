@@ -1,7 +1,9 @@
 """Click command group and all catalog subcommands.
 
-Role-aware: collection-only commands are hidden from help and blocked at
-invocation time for any role other than collection-catalog-contributor.
+Role-aware gating (two tiers):
+- _DEPLOYMENT_CATALOG_ONLY : visible/runnable for deployer (deployment-catalog role)
+  and collection-catalog-contributor.
+- _COLLECTION_ONLY         : visible/runnable for collection-catalog-contributor only.
 """
 
 import os
@@ -14,7 +16,7 @@ import click
 import yaml
 
 from jejune_cli.configuration import component_config_check
-from jejune_cli.role import detect_role as _detect_role
+from jejune_cli.role import detect_role as _detect_role, role_inherits as _role_inherits
 
 from ._impl import (
     _catalog_config_status,
@@ -25,12 +27,17 @@ from ._impl import (
 )
 
 
+# Commands accessible to deployer (via deployment-catalog role) AND collection role.
+_DEPLOYMENT_CATALOG_ONLY: frozenset[str] = frozenset({"check-deployment"})
+
+# Commands accessible to collection-catalog-contributor only.
 _COLLECTION_ONLY: frozenset[str] = frozenset({
-    "sync", "check-deployment", "test", "sample",
+    "sync", "test", "sample",
     "status-config", "hint-config", "status-availability", "hint-availability",
 })
 
 _COLLECTION_ROLE = "collection-catalog-contributor"
+_DEPLOYMENT_CATALOG_ROLE = "deployment-catalog"
 
 
 # ---------------------------------------------------------------------------
@@ -38,17 +45,28 @@ _COLLECTION_ROLE = "collection-catalog-contributor"
 # ---------------------------------------------------------------------------
 
 class _CatalogGroup(click.Group):
-    """Hides and blocks collection-only commands for non-collection roles."""
+    """Hides and blocks role-gated commands based on the active role."""
 
     def _is_collection_role(self) -> bool:
         active_role, _ = _detect_role()
         return active_role == _COLLECTION_ROLE
 
+    def _is_deployment_catalog_role(self) -> bool:
+        """True for deployer (inherits deployment-catalog) and collection role."""
+        active_role, _ = _detect_role()
+        return (
+            _role_inherits(active_role, _DEPLOYMENT_CATALOG_ROLE)
+            or active_role == _COLLECTION_ROLE
+        )
+
     def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
         is_collection = self._is_collection_role()
+        is_deployment_catalog = self._is_deployment_catalog_role()
         commands = []
         for name in self.list_commands(ctx):
             if not is_collection and name in _COLLECTION_ONLY:
+                continue
+            if not is_deployment_catalog and name in _DEPLOYMENT_CATALOG_ONLY:
                 continue
             cmd = self.get_command(ctx, name)
             if cmd and not cmd.hidden:
@@ -65,6 +83,11 @@ class _CatalogGroup(click.Group):
         if cmd_name in _COLLECTION_ONLY and not self._is_collection_role():
             raise click.ClickException(
                 f"'{cmd_name}' is only available for the {_COLLECTION_ROLE} role."
+            )
+        if cmd_name in _DEPLOYMENT_CATALOG_ONLY and not self._is_deployment_catalog_role():
+            raise click.ClickException(
+                f"'{cmd_name}' requires the {_DEPLOYMENT_CATALOG_ROLE} role "
+                f"(or {_COLLECTION_ROLE})."
             )
         return super().invoke(ctx)
 
@@ -101,6 +124,16 @@ def check(catalog_path, root_dir, verbose):
     """
     if catalog_path is None:
         # Doc-level mode: validate the current repo's catalog.yaml.
+        _doc_yaml = Path.cwd() / "catalog.yaml"
+        if _doc_yaml.exists():
+            _data = yaml.safe_load(_doc_yaml.read_text()) or {}
+            if "documents" in _data:
+                raise click.ClickException(
+                    "catalog.yaml looks like a deployment catalog (has 'documents' list), "
+                    "not a document catalog.\n"
+                    "To check a deployment catalog use: "
+                    "jejune catalog check-deployment <deployment_path>"
+                )
         from jejune_cli.test import _check_doc_yaml
         errors, file_refs = _check_doc_yaml(Path.cwd())
         if errors:
