@@ -31,14 +31,37 @@ def _catalog_config_status() -> tuple[str, str]:
     return "ok", ""
 
 
+def _check_deployment_catalog_availability() -> tuple[bool, str]:
+    """Return (ok, msg) for the deployment catalog.yaml in CWD."""
+    cwd = Path.cwd()
+    full_cat = cwd.parent.parent / _REPO_NAME / "full-catalog.yaml"
+    results = _check_deployment_impl(cwd, full_cat)
+    failing = [item for item, ok, _ in results if not ok]
+    if not failing:
+        return True, "deployment catalog ok"
+    return False, "; ".join(failing)
+
+
 def _check_availability() -> tuple[bool, str]:
     """Return (ok, msg) for catalog availability.
 
+    For the deployer role (inherits deployment-catalog): validates the
+    deployment catalog.yaml in CWD via _check_deployment_impl.
+
+    For all other roles (collection-catalog-contributor, doc-steward, …):
     Tier 1: full-catalog.yaml present under JEJUNE_ROOT_DIR.
     Tier 2: already cloned into .jejune/tmp/.
     Tier 3: shallow-clone the public repo into .jejune/tmp/.
     Error only when both a local copy and the clone attempt fail.
     """
+    try:
+        from jejune_cli.role import detect_role, role_inherits
+        active_role, _ = detect_role()
+        if role_inherits(active_role, "deployment-catalog"):
+            return _check_deployment_catalog_availability()
+    except Exception:
+        pass
+
     from jejune_cli._ecosystem import REPO_ROOT_DIR
 
     raw_root = os.environ.get(_CONFIG_VAR, "")
