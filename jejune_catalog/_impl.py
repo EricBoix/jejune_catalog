@@ -140,9 +140,8 @@ def _check_deployment_impl(
     """Validate a deployment directory; return (item, ok, message)."""
     results: list[tuple[str, bool, str]] = []
 
-    for fname in ("catalog.yaml", "deployment.env"):
-        f = deployment_path / fname
-        results.append((fname, f.exists(), "ok" if f.exists() else "missing"))
+    f = deployment_path / "catalog.yaml"
+    results.append(("catalog.yaml", f.exists(), "ok" if f.exists() else "missing"))
 
     catalog_path = deployment_path / "catalog.yaml"
     if not catalog_path.exists():

@@ -123,31 +123,41 @@ def check(catalog_path, root_dir, verbose):
     local clones (collection-catalog-contributor only).
     """
     if catalog_path is None:
-        # Doc-level mode: validate the current repo's catalog.yaml.
         _doc_yaml = Path.cwd() / "catalog.yaml"
-        if _doc_yaml.exists():
-            _data = yaml.safe_load(_doc_yaml.read_text()) or {}
-            if "documents" in _data:
-                raise click.ClickException(
-                    "catalog.yaml looks like a deployment catalog (has 'documents' list), "
-                    "not a document catalog.\n"
-                    "To check a deployment catalog use: "
-                    "jejune catalog check-deployment <deployment_path>"
-                )
-        from jejune_cli.test import _check_doc_yaml
-        errors, file_refs = _check_doc_yaml(Path.cwd())
-        if errors:
-            for err in errors:
-                click.echo(f"  {click.style(err, fg='red')}")
-            n = len([e for e in errors if "see " not in e])
-            click.echo(click.style(f"catalog.yaml — {n} error(s)", fg="red"))
-            sys.exit(1)
+        _is_deployment_catalog = (
+            _doc_yaml.exists()
+            and "documents" in (yaml.safe_load(_doc_yaml.read_text()) or {})
+        )
+        if _is_deployment_catalog:
+            # Deployment-catalog mode: auto-dispatch to the deployment check.
+            dep_path = Path.cwd()
+            full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
+            root = Path(root_dir) if root_dir else None
+            results = _check_deployment_impl(dep_path, full_cat, root)
+            all_ok = True
+            for item, ok, msg in results:
+                status = click.style(msg, fg="green") if ok else click.style(msg, fg="red")
+                click.echo(f"  {item:<45} {status}")
+                if not ok:
+                    all_ok = False
+            if not all_ok:
+                sys.exit(1)
         else:
-            if verbose and file_refs:
-                key_width = max(len(k) for k, _ in file_refs)
-                for key, rel in file_refs:
-                    click.echo(f"  {key:<{key_width}}  {rel}")
-            click.echo(click.style("catalog.yaml — ok", fg="green"))
+            # Doc-level mode: validate the current repo's catalog.yaml.
+            from jejune_cli.test import _check_doc_yaml
+            errors, file_refs = _check_doc_yaml(Path.cwd())
+            if errors:
+                for err in errors:
+                    click.echo(f"  {click.style(err, fg='red')}")
+                n = len([e for e in errors if "see " not in e])
+                click.echo(click.style(f"catalog.yaml — {n} error(s)", fg="red"))
+                sys.exit(1)
+            else:
+                if verbose and file_refs:
+                    key_width = max(len(k) for k, _ in file_refs)
+                    for key, rel in file_refs:
+                        click.echo(f"  {key:<{key_width}}  {rel}")
+                click.echo(click.style("catalog.yaml — ok", fg="green"))
     else:
         # Collection-level mode: check each catalog entry.
         active_role, _ = _detect_role()
