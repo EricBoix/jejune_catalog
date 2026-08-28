@@ -50,7 +50,7 @@ def _check_availability() -> tuple[bool, str]:
     For the deployer role (inherits deployment-catalog): validates the
     deployment catalog.yaml in CWD via _check_deployment_impl.
 
-    For all other roles (collection-catalog-contributor, doc-steward, …):
+    For all other roles (catalog-contributor, doc-steward, …):
     Tier 1: full-catalog.yaml present under JEJUNE_ROOT_DIR.
     Tier 2: already cloned into .jejune/tmp/.
     Tier 3: shallow-clone the public repo into .jejune/tmp/.
@@ -90,7 +90,7 @@ def _check_availability() -> tuple[bool, str]:
     return False, f"could not access {_REPO_NAME} locally or via git clone"
 
 
-def _detect_collection_catalog_contributor() -> bool:
+def _detect_catalog_contributor() -> bool:
     try:
         return Path.cwd().joinpath("full-catalog.yaml").exists()
     except Exception:

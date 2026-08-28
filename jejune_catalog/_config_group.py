@@ -1,6 +1,6 @@
-"""Configuration init subgroup for the collection-catalog-contributor role.
+"""Configuration init subgroup for the catalog-contributor role.
 
-Provides `jejune configuration collection-catalog-contributor init`, which
+Provides `jejune configuration catalog-contributor init`, which
 scaffolds the workspace files (.jejune/role, .jejune/ecosystem-env-config).
 """
 
@@ -18,7 +18,7 @@ _ECOSYSTEM_TEMPLATE = Path(__file__).parent / "templates" / "ecosystem-env-confi
 
 @click.command("init")
 def curator_init() -> None:
-    """Write collection-catalog-contributor scaffold files into .jejune/ in the current directory.
+    """Write catalog-contributor scaffold files into .jejune/ in the current directory.
 
     Creates .jejune/role and .jejune/ecosystem-env-config from built-in templates.
     Adds .jejune to .gitignore so the whole directory stays local by default.
@@ -59,9 +59,9 @@ def curator_init() -> None:
     print_next_steps()
 
 
-@click.group("collection-catalog-contributor", short_help="Collection-catalog-contributor role workspace")
+@click.group("catalog-contributor", short_help="Collection-catalog-contributor role workspace")
 def curator_config_group():
-    """Initialise and inspect the collection-catalog-contributor workspace."""
+    """Initialise and inspect the catalog-contributor workspace."""
 
 
 curator_config_group.add_command(curator_init, "init")

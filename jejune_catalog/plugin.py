@@ -3,12 +3,12 @@
 Registers two roles and wires them into the jejune plugin system:
 
 - deployment-catalog (abstract): deployment catalog checking, inherited by deployer.
-- collection-catalog-contributor: manages collection-level catalogs
+- catalog-contributor: manages collection-level catalogs
   (full-catalog.yaml, deployments).
 
 Command visibility:
   deployer / deployment-catalog         : catalog check-deployment
-  collection-catalog-contributor        : all catalog commands
+  catalog-contributor        : all catalog commands
 
 Doc-steward manifest operations live in jejune_cli core (jejune manifest).
 
@@ -25,7 +25,7 @@ from jejune_cli.role import register_role as _register_role, register_role_help_
 
 from ._commands import catalog_group
 from ._config_group import curator_config_group
-from ._impl import _check_availability, _detect_collection_catalog_contributor
+from ._impl import _check_availability, _detect_catalog_contributor
 
 
 # ---------------------------------------------------------------------------
@@ -33,9 +33,9 @@ from ._impl import _check_availability, _detect_collection_catalog_contributor
 # ---------------------------------------------------------------------------
 
 # Abstract role: never auto-detected; inherited by deployer to grant access to
-# check-deployment. collection-catalog-contributor is handled by an explicit allow
+# check-deployment. catalog-contributor is handled by an explicit allow
 # in _commands._CatalogGroup, so it does NOT inherit deployment-catalog — this
-# avoids a duplicate catalog section in collection-catalog-contributor --help.
+# avoids a duplicate catalog section in catalog-contributor --help.
 _deployment_catalog_role = JejuneRole(
     name="deployment-catalog",
     components=frozenset({"catalog"}),
@@ -52,12 +52,12 @@ _register_role(_deployment_catalog_role)
 _register_role_help_section("deployment-catalog", stage="collection", order=95)
 
 catalog_role = JejuneRole(
-    name="collection-catalog-contributor",
+    name="catalog-contributor",
     components=frozenset({"catalog"}),
     includes=("contributor",),
     detection_reason="full-catalog.yaml detected",
-    section_title="Collection-catalog-contributor commands",
-    detect=_detect_collection_catalog_contributor,
+    section_title="Catalog-contributor commands",
+    detect=_detect_catalog_contributor,
     help_stage="collection",
     order=20,
     config_group=curator_config_group,
@@ -68,7 +68,7 @@ catalog_role = JejuneRole(
 # Plugin registration
 # ---------------------------------------------------------------------------
 
-register_role_repos("collection-catalog-contributor", [("jejune_catalog", None, None)])
+register_role_repos("catalog-contributor", [("jejune_catalog", None, None)])
 
 plugin = JejunePlugin(
     name="catalog",

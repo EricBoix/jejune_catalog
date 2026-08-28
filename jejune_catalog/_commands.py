@@ -2,8 +2,8 @@
 
 Role-aware gating (two tiers):
 - _DEPLOYMENT_CATALOG_ONLY : visible/runnable for deployer (deployment-catalog role)
-  and collection-catalog-contributor.
-- _COLLECTION_ONLY         : visible/runnable for collection-catalog-contributor only.
+  and catalog-contributor.
+- _COLLECTION_ONLY         : visible/runnable for catalog-contributor only.
 """
 
 import os
@@ -30,13 +30,13 @@ from ._impl import (
 # Commands accessible to deployer (via deployment-catalog role) AND collection role.
 _DEPLOYMENT_CATALOG_ONLY: frozenset[str] = frozenset({"check-deployment"})
 
-# Commands accessible to collection-catalog-contributor only.
+# Commands accessible to catalog-contributor only.
 _COLLECTION_ONLY: frozenset[str] = frozenset({
     "sync", "test", "sample",
     "status-config", "hint-config", "status-availability", "hint-availability",
 })
 
-_COLLECTION_ROLE = "collection-catalog-contributor"
+_COLLECTION_ROLE = "catalog-contributor"
 _DEPLOYMENT_CATALOG_ROLE = "deployment-catalog"
 
 
@@ -130,7 +130,7 @@ def check(catalog_path, root_dir):
 
     Without --catalog: validates the current directory's catalog.yaml as a
     deployment catalog. With --catalog PATH: verifies a collection catalog
-    against GitHub visibility and local clones (collection-catalog-contributor only).
+    against GitHub visibility and local clones (catalog-contributor only).
     """
     if catalog_path is None:
         dep_path = Path.cwd()
@@ -171,7 +171,7 @@ def check(catalog_path, root_dir):
 
 
 # ---------------------------------------------------------------------------
-# Collection-level commands (collection-catalog-contributor only)
+# Collection-level commands (catalog-contributor only)
 # ---------------------------------------------------------------------------
 
 @catalog_group.command("test")
