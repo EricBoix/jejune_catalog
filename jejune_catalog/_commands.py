@@ -196,7 +196,7 @@ def check(catalog_path, root_dir):
 def catalog_test(catalog_file, root_dir, repo, verbose):
     """Validate jejune_doc_* repositories found in the catalog.
 
-    CATALOG_FILE defaults to $JEJUNE_CATALOG, then .jejune/catalog.yaml.
+    CATALOG_FILE defaults to $JEJUNE_CATALOG, then catalog.yaml in the CWD.
 
     Repositories are expected under ROOT_DIR/<name>/. Missing repositories
     (or all when ROOT_DIR is unset) are cloned into .jejune/tmp/ which is
@@ -206,23 +206,21 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     checked for existence. Exits with a non-zero status if any check fails.
     """
     import subprocess
+    from jejune_cli.ecosystem import resolve_dirs
     from jejune_cli.test import _check_doc_yaml, _tmp_dir
 
     if catalog_file is None:
         catalog_file = os.environ.get("JEJUNE_CATALOG")
     if catalog_file is None:
-        raise click.ClickException(
-            "No catalog specified. Set $JEJUNE_CATALOG or pass CATALOG_FILE."
-        )
+        catalog_file = str(Path.cwd() / "catalog.yaml")
 
-    root = Path(root_dir) if root_dir else None
-    if root is not None and not root.exists():
-        source = (
-            "$JEJUNE_ROOT_DIR"
-            if os.environ.get("JEJUNE_ROOT_DIR") == root_dir
-            else "--root-dir"
-        )
-        raise click.ClickException(f"ROOT_DIR ({source}) does not exist: {root}")
+    # Resolve ecosystem dirs; honour explicit --root-dir when it actually exists.
+    eco_root, eco_tmp = resolve_dirs()
+    if root_dir:
+        explicit = Path(root_dir)
+        root = explicit if explicit.is_dir() else eco_root
+    else:
+        root = eco_root
 
     catalog_path = Path(catalog_file)
     if not catalog_path.exists():
@@ -241,8 +239,13 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
         name = doc["name"]
         url = doc["url"]
 
-        repo_dir = root / name if root is not None else None
-        if repo_dir is None or not repo_dir.exists():
+        repo_dir: Path | None = None
+        if root is not None and (root / name).is_dir():
+            repo_dir = root / name
+        elif eco_tmp is not None and (eco_tmp / name).is_dir():
+            repo_dir = eco_tmp / name
+
+        if repo_dir is None:
             if tmp is None:
                 tmp = _tmp_dir()
             repo_dir = tmp / name
