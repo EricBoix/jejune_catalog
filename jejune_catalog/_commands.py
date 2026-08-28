@@ -125,48 +125,25 @@ def catalog_group():
     "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
     help="Directory holding jejune_doc_* clones (default: $JEJUNE_ROOT_DIR).",
 )
-@click.option(
-    "--verbose", "-v", is_flag=True, default=False,
-    help="Print file references (doc-level mode only).",
-)
-def check(catalog_path, root_dir, verbose):
+def check(catalog_path, root_dir):
     """Validate a catalog.
 
-    Without --catalog: validates the current directory's catalog.yaml (doc-level).
-    With --catalog PATH: verifies a collection catalog against GitHub visibility and
-    local clones (collection-catalog-contributor only).
+    Without --catalog: validates the current directory's catalog.yaml as a
+    deployment catalog. With --catalog PATH: verifies a collection catalog
+    against GitHub visibility and local clones (collection-catalog-contributor only).
     """
     if catalog_path is None:
-        _doc_yaml = Path.cwd() / "catalog.yaml"
-        _is_deployment_catalog = (
-            _doc_yaml.exists()
-            and "documents" in (yaml.safe_load(_doc_yaml.read_text()) or {})
-        )
-        if _is_deployment_catalog:
-            # Deployment-catalog mode: auto-dispatch to the deployment check.
-            dep_path = Path.cwd()
-            full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
-            results = _check_deployment_impl(dep_path, full_cat)
-            if not _print_deployment_results(results):
-                sys.exit(1)
-        else:
-            # Doc-level mode: validate the current repo's catalog.yaml.
-            from jejune_cli.test import _check_doc_yaml
-            errors, file_refs = _check_doc_yaml(Path.cwd())
-            if errors:
-                for err in errors:
-                    click.echo(f"  {click.style(err, fg='red')}")
-                n = len([e for e in errors if "see " not in e])
-                click.echo(click.style(f"catalog.yaml — {n} error(s)", fg="red"))
-                sys.exit(1)
-            else:
-                if verbose and file_refs:
-                    key_width = max(len(k) for k, _ in file_refs)
-                    for key, rel in file_refs:
-                        click.echo(f"  {key:<{key_width}}  {rel}")
-                click.echo(click.style("catalog.yaml — ok", fg="green"))
+        dep_path = Path.cwd()
+        if not (dep_path / "catalog.yaml").exists():
+            raise click.ClickException(
+                "catalog.yaml not found in current directory — "
+                "for document manifests use `jejune manifest check`"
+            )
+        full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
+        results = _check_deployment_impl(dep_path, full_cat)
+        if not _print_deployment_results(results):
+            sys.exit(1)
     else:
-        # Collection-level mode: check each catalog entry.
         active_role, _ = _detect_role()
         if active_role != _COLLECTION_ROLE:
             raise click.ClickException(
@@ -225,7 +202,7 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     (or all when ROOT_DIR is unset) are cloned into .jejune/tmp/ which is
     gitignored automatically.
 
-    For each repository, catalog.yaml is parsed and every file it references is
+    For each repository, manifest.yaml is parsed and every file it references is
     checked for existence. Exits with a non-zero status if any check fails.
     """
     import subprocess
@@ -401,9 +378,9 @@ def sync(catalog_path, root_dir, do_add):
     help="Root dir holding side-by-side jejune_* clones (default: $JEJUNE_ROOT_DIR).",
 )
 def slug(doc_catalog, full_catalog_path, root_dir):
-    """Compute a unique doc_name slug from a doc_*/catalog.yaml.
+    """Compute a unique doc_name slug from a doc_*/manifest.yaml.
 
-    DOC_CATALOG is the path to the document's catalog.yaml.
+    DOC_CATALOG is the path to the document's manifest.yaml.
 
     The slug is derived from the document's title (extended with author or isbn
     only when needed for uniqueness). The full-catalog.yaml is consulted to

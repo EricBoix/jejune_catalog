@@ -24,7 +24,7 @@ wheels = [
 ]
 
 [[package]]
-name = "jejune-catalog-check"
+name = "jejune-catalog"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
