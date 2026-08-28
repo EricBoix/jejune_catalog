@@ -16,6 +16,8 @@ _PLACEHOLDER = "_CHANGE_ME"
 _CONFIG_VAR = "JEJUNE_ROOT_DIR"
 _REPO_NAME = "jejune_catalog"
 
+_DEPLOYMENT_CATALOG_SCHEMA_PATH = Path(__file__).parent / "schema" / "deployment_catalog.yaml"
+
 
 # ---------------------------------------------------------------------------
 # Configuration helpers
@@ -96,6 +98,30 @@ def _detect_collection_catalog_contributor() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Deployment catalog schema validation
+# ---------------------------------------------------------------------------
+
+def _validate_deployment_catalog_entry(doc: object, index: int) -> list[str]:
+    """Validate one entry against the deployment catalog schema; return error strings."""
+    if not isinstance(doc, dict):
+        return [f"entry #{index}: not a mapping"]
+    schema = yaml.safe_load(_DEPLOYMENT_CATALOG_SCHEMA_PATH.read_text())
+    errors: list[str] = []
+    _TYPE_MAP = {"string": str, "boolean": bool}
+    for field, ftype in schema.get("required_fields", {}).items():
+        if field not in doc:
+            errors.append(f"required field '{field}' missing")
+        elif not isinstance(doc[field], _TYPE_MAP.get(ftype, object)):
+            errors.append(f"'{field}' must be a {ftype}")
+    for field, ftype in schema.get("optional_fields", {}).items():
+        if field in doc and not isinstance(doc[field], _TYPE_MAP.get(ftype, object)):
+            errors.append(f"'{field}' must be a {ftype}")
+    if errors:
+        errors.append(f"see {_DEPLOYMENT_CATALOG_SCHEMA_PATH} for the expected format")
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # GitHub helpers
 # ---------------------------------------------------------------------------
 
@@ -125,7 +151,12 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
         return [("catalog.yaml", False, f"not found: {catalog}")]
     docs = yaml.safe_load(catalog.read_text()).get("documents", [])
     results: list[tuple[str, bool, str]] = []
-    for doc in docs:
+    for i, doc in enumerate(docs):
+        schema_errors = _validate_deployment_catalog_entry(doc, i)
+        if schema_errors:
+            label = doc.get("name") if isinstance(doc, dict) else None
+            results.append((label or f"entry #{i}", False, "; ".join(schema_errors)))
+            continue
         name = doc["name"]
         url = doc["url"].rstrip("/")
         expected_public = doc.get("public", True)
@@ -172,9 +203,15 @@ def _check_deployment_impl(
     ref_docs: dict[str, dict] = {}
     if catalog_ref.exists():
         for doc in yaml.safe_load(catalog_ref.read_text()).get("documents", []):
-            ref_docs[doc["name"]] = doc
+            if isinstance(doc, dict) and "name" in doc:
+                ref_docs[doc["name"]] = doc
 
-    for doc in yaml.safe_load(catalog_path.read_text()).get("documents", []):
+    for i, doc in enumerate(yaml.safe_load(catalog_path.read_text()).get("documents", [])):
+        schema_errors = _validate_deployment_catalog_entry(doc, i)
+        if schema_errors:
+            label = doc.get("name") if isinstance(doc, dict) else None
+            results.append((label or f"entry #{i}", False, "; ".join(schema_errors)))
+            continue
         name = doc["name"]
         url = doc["url"].rstrip("/")
         issues: list[str] = []
