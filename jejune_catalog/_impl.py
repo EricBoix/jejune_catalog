@@ -295,3 +295,82 @@ def _sync_catalog_impl(
         n_added = len(to_add)
 
     return results, n_added
+
+
+# ---------------------------------------------------------------------------
+# Catalog document iteration (shared by convert-test and future commands)
+# ---------------------------------------------------------------------------
+
+def _iter_docs(docs, root, eco_tmp):
+    """Yield (name, url, repo_dir) for each catalog entry.
+
+    Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
+    Reuses repo_status() from jejune_cli.ecosystem (root → tmp → remote tiers).
+    """
+    from jejune_cli.ecosystem import repo_status
+    from jejune_cli.test import _tmp_dir
+
+    tmp = None
+    for doc in docs:
+        name, url = doc["name"], doc["url"]
+        tier, base = repo_status(name, root, eco_tmp)
+        if tier in ("root", "tmp"):
+            repo_dir = Path(base)
+        else:
+            if tmp is None:
+                tmp = _tmp_dir()
+            repo_dir = tmp / name
+            if not repo_dir.exists():
+                print(f"Cloning {name} ...")
+                subprocess.run(["git", "clone", url, str(repo_dir)], check=True)
+        yield name, url, repo_dir
+
+
+# ---------------------------------------------------------------------------
+# Per-document converter build and test logic
+# ---------------------------------------------------------------------------
+
+_DOC_PREFIX = "jejune_doc_"
+
+
+def _docker_image_name(repo_dir: Path) -> str:
+    name = repo_dir.resolve().name
+    if name.startswith(_DOC_PREFIX):
+        name = name[len(_DOC_PREFIX):]
+    return f"jejune:convert_{name}" if name else "jejune:convert"
+
+
+def _has_converter(repo_dir: Path) -> tuple[bool, Path, Path]:
+    """Return (has_converter, dockerfile, context)."""
+    ctx = repo_dir / "DockerContext"
+    df = ctx / "Dockerfile"
+    return (ctx.is_dir() and df.exists()), df, ctx
+
+
+def _convert_test_doc(
+    repo_dir: Path, no_cache: bool, no_build: bool
+) -> tuple[str, str]:
+    """Return (outcome, detail). outcome ∈ {skipped, build_failed, unchanged, changed}."""
+    has, dockerfile, context = _has_converter(repo_dir)
+    if not has:
+        return "skipped", "no DockerContext"
+    image = _docker_image_name(repo_dir)
+    if not no_build:
+        extra = ["--no-cache"] if no_cache else []
+        r = subprocess.run(
+            ["docker", "build", *extra, "-t", image, "-f", str(dockerfile), str(context)],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout).strip().splitlines()
+            return "build_failed", tail[-1] if tail else "build failed"
+    else:
+        r = subprocess.run(
+            ["docker", "images", "-q", image], capture_output=True, text=True
+        )
+        if not (r.returncode == 0 and r.stdout.strip()):
+            return "build_failed", f"image {image!r} not found"
+    r = subprocess.run(
+        ["docker", "run", "--rm", image, "--test"], capture_output=True, text=True
+    )
+    return ("unchanged", "tests passed") if r.returncode == 0 else ("changed", "tests failed")

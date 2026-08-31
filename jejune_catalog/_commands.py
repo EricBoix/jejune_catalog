@@ -23,6 +23,8 @@ from ._impl import (
     _check_availability,
     _check_catalog_impl,
     _check_deployment_impl,
+    _convert_test_doc,
+    _iter_docs,
     _sync_catalog_impl,
 )
 
@@ -444,3 +446,78 @@ def check_deployment(deployment_path):
     results = _check_deployment_impl(dep_path, full_cat)
     if not _print_deployment_results(results):
         raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
+# Standalone command added to jejune_cli.convert.convert by plugin.py
+# ---------------------------------------------------------------------------
+
+def _load_catalog_docs(catalog_file):
+    if catalog_file is None:
+        catalog_file = os.environ.get("JEJUNE_CATALOG") or str(Path.cwd() / "catalog.yaml")
+    p = Path(catalog_file)
+    if not p.exists():
+        raise click.ClickException(f"Catalog file not found: {catalog_file}")
+    return yaml.safe_load(p.read_text())["documents"]
+
+
+@click.command("test")
+@click.option(
+    "--catalog", "catalog_file",
+    default=None, type=click.Path(),
+    help="Catalog file (default: $JEJUNE_CATALOG or ./catalog.yaml).",
+)
+@click.option(
+    "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
+    help="Directory holding jejune_doc_* clones (default: $JEJUNE_ROOT_DIR).",
+)
+@click.option("--repo", default=None, help="Restrict to one repository (by name).")
+@click.option("--no-cache", is_flag=True, default=False, help="Bypass Docker layer cache.")
+@click.option("--no-build", is_flag=True, default=False, help="Skip build; use cached image.")
+def convert_test(catalog_file, root_dir, repo, no_cache, no_build):
+    """Build and test converter containers for all catalog documents.
+
+    For each document that has a DockerContext/, builds the converter image
+    (unless --no-build) then runs `docker run --test` (pytest vs. reference).
+
+    \b
+    unchanged    — tests pass (conversion matches reference)
+    changed      — tests fail (conversion drift detected)
+    build-failed — image did not build
+    skipped      — no DockerContext in this repo
+    """
+    from jejune_cli.ecosystem import resolve_dirs
+
+    docs = _load_catalog_docs(catalog_file)
+    if repo:
+        docs = [d for d in docs if d["name"] == repo]
+        if not docs:
+            raise click.ClickException(f"Repository '{repo}' not found in catalog.")
+
+    eco_root, eco_tmp = resolve_dirs()
+    root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
+
+    counts = {"unchanged": 0, "changed": 0, "build_failed": 0, "skipped": 0}
+    _COLORS = {
+        "unchanged": "green",
+        "changed": "red",
+        "build_failed": "red",
+        "skipped": "yellow",
+    }
+    col = 42
+
+    for name, _url, repo_dir in _iter_docs(docs, root, eco_tmp):
+        outcome, detail = _convert_test_doc(repo_dir, no_cache, no_build)
+        counts[outcome] += 1
+        label = click.style(outcome.replace("_", "-"), fg=_COLORS[outcome])
+        click.echo(f"  {name:<{col}}  {label}  {detail}")
+
+    click.echo()
+    click.echo(
+        f"  {counts['unchanged']} unchanged  "
+        f"{counts['changed']} changed  "
+        f"{counts['build_failed']} build-failed  "
+        f"{counts['skipped']} skipped"
+    )
+    if counts["changed"] or counts["build_failed"]:
+        sys.exit(1)

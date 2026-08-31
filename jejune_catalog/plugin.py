@@ -23,9 +23,12 @@ from jejune_cli.ecosystem import register_role_repos
 from jejune_cli.plugin import JejunePlugin, JejuneRole
 from jejune_cli.role import register_role as _register_role, register_role_help_section as _register_role_help_section
 
-from ._commands import catalog_group
+from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
 from ._impl import _check_availability, _detect_catalog_contributor
+
+from jejune_cli.convert import convert as _convert_group
+_convert_group.add_command(convert_test, "test")
 
 
 # ---------------------------------------------------------------------------
