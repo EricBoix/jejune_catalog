@@ -34,7 +34,7 @@ _DEPLOYMENT_CATALOG_ONLY: frozenset[str] = frozenset({"check-deployment"})
 
 # Commands accessible to catalog-contributor only.
 _COLLECTION_ONLY: frozenset[str] = frozenset({
-    "sync", "test", "sample",
+    "sync", "test", "install", "sample",
     "status-config", "hint-config", "status-availability", "hint-availability",
 })
 
@@ -207,54 +207,22 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     For each repository, manifest.yaml is parsed and every file it references is
     checked for existence. Exits with a non-zero status if any check fails.
     """
-    import subprocess
     from jejune_cli.ecosystem import resolve_dirs
-    from jejune_cli.test import _check_doc_yaml, _tmp_dir
+    from jejune_cli.test import _check_doc_yaml
 
-    if catalog_file is None:
-        catalog_file = os.environ.get("JEJUNE_CATALOG")
-    if catalog_file is None:
-        catalog_file = str(Path.cwd() / "catalog.yaml")
+    docs = _load_catalog_docs(catalog_file)
 
-    # Resolve ecosystem dirs; honour explicit --root-dir when it actually exists.
     eco_root, eco_tmp = resolve_dirs()
-    if root_dir:
-        explicit = Path(root_dir)
-        root = explicit if explicit.is_dir() else eco_root
-    else:
-        root = eco_root
-
-    catalog_path = Path(catalog_file)
-    if not catalog_path.exists():
-        raise click.ClickException(f"Catalog file not found: {catalog_file}")
-    docs = yaml.safe_load(catalog_path.read_text())["documents"]
+    root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
 
     if repo:
         docs = [d for d in docs if d["name"] == repo]
         if not docs:
             raise click.ClickException(f"Repository '{repo}' not found in catalog.")
 
-    tmp: Path | None = None
     all_ok = True
 
-    for doc in docs:
-        name = doc["name"]
-        url = doc["url"]
-
-        repo_dir: Path | None = None
-        if root is not None and (root / name).is_dir():
-            repo_dir = root / name
-        elif eco_tmp is not None and (eco_tmp / name).is_dir():
-            repo_dir = eco_tmp / name
-
-        if repo_dir is None:
-            if tmp is None:
-                tmp = _tmp_dir()
-            repo_dir = tmp / name
-            if not repo_dir.exists():
-                click.echo(f"Cloning {name} ...")
-                subprocess.run(["git", "clone", url, str(repo_dir)], check=True)
-
+    for name, _url, repo_dir in _iter_docs(docs, root, eco_tmp):
         cloned_label = click.style("cloned", fg="green")
         errors, file_refs = _check_doc_yaml(repo_dir)
         if errors:
@@ -278,6 +246,35 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     else:
         click.echo(click.style(f"{len(docs)} repo(s) — some checks failed.", fg="red"))
         sys.exit(1)
+
+
+def _do_catalog_install(
+    catalog_file: str | None = None,
+    root_dir: str | None = None,
+    repo: str | None = None,
+) -> None:
+    from jejune_cli.ecosystem import resolve_dirs
+    docs = _load_catalog_docs(catalog_file)
+    if repo:
+        docs = [d for d in docs if d["name"] == repo]
+        if not docs:
+            raise click.ClickException(f"Repository '{repo}' not found in catalog.")
+    eco_root, eco_tmp = resolve_dirs()
+    root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
+    n = sum(1 for _ in _iter_docs(docs, root, eco_tmp))
+    click.echo(f"{n} repo(s) ready.")
+
+
+@catalog_group.command("install")
+@click.argument("catalog_file", required=False, default=None)
+@click.option(
+    "--root-dir", envvar="JEJUNE_ROOT_DIR", default=None, type=click.Path(),
+    help="Directory holding side-by-side clones (default: $JEJUNE_ROOT_DIR).",
+)
+@click.option("--repo", default=None, help="Restrict to one repository (by name).")
+def catalog_install(catalog_file, root_dir, repo):
+    """Clone missing catalog repositories into .jejune/tmp/."""
+    _do_catalog_install(catalog_file, root_dir, repo)
 
 
 @catalog_group.command("sample")
