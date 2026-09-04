@@ -15,7 +15,6 @@ from pathlib import Path
 import click
 import yaml
 
-from jejune_cli.configuration import component_config_check
 from jejune_cli.role import detect_role as _detect_role, role_inherits as _role_inherits
 
 from ._impl import (
@@ -151,7 +150,7 @@ def check(catalog_path, root_dir):
             raise click.ClickException(
                 f"--catalog is only available for the {_COLLECTION_ROLE} role."
             )
-        cfg_status, hint = component_config_check("catalog")
+        cfg_status, hint = _catalog_config_status()
         if cfg_status == "error":
             raise click.ClickException(f"not configured — {hint}")
         cat_path = Path(catalog_path)
