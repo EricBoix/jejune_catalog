@@ -64,7 +64,7 @@ def _check_availability() -> tuple[bool, str]:
     except Exception:
         pass
 
-    from jejune_cli._ecosystem import REPO_ROOT_DIR
+    from jejune_cli._git_server_config import REPO_ROOT_DIR
 
     raw_root = os.environ.get(_CONFIG_VAR, "")
     if raw_root and _PLACEHOLDER not in raw_root:
