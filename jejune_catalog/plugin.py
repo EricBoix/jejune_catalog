@@ -19,7 +19,7 @@ Module layout:
   plugin.py        — role definitions, heuristic, plugin registration (this file)
 """
 
-from jejune_cli.ecosystem import register_role_repos
+from jejune_cli.role import register_role_repos
 from jejune_cli.plugin import JejunePlugin, JejuneRole
 from jejune_cli.role import register_role as _register_role, register_role_help_section as _register_role_help_section
 

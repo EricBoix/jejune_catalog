@@ -305,15 +305,16 @@ def _iter_docs(docs, root, eco_tmp):
     """Yield (name, url, repo_dir) for each catalog entry.
 
     Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
-    Reuses repo_status() from jejune_cli.ecosystem (root → tmp → remote tiers).
+    Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
     """
-    from jejune_cli.ecosystem import repo_status
+    from jejune_cli.component_registry import REGISTRY
     from jejune_cli.test import _tmp_dir
 
+    eco = REGISTRY.get("ecosystem")
     tmp = None
     for doc in docs:
         name, url = doc["name"], doc["url"]
-        tier, base = repo_status(name, root, eco_tmp)
+        tier, base = eco.repo_status(name, root, eco_tmp)
         if tier in ("root", "tmp"):
             repo_dir = Path(base)
         else:

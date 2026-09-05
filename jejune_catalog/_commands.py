@@ -206,12 +206,12 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     For each repository, manifest.yaml is parsed and every file it references is
     checked for existence. Exits with a non-zero status if any check fails.
     """
-    from jejune_cli.ecosystem import resolve_dirs
+    from jejune_cli.component_registry import REGISTRY
     from jejune_cli.test import _check_doc_yaml
 
     docs = _load_catalog_docs(catalog_file)
 
-    eco_root, eco_tmp = resolve_dirs()
+    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
 
     if repo:
@@ -252,13 +252,13 @@ def _do_catalog_install(
     root_dir: str | None = None,
     repo: str | None = None,
 ) -> None:
-    from jejune_cli.ecosystem import resolve_dirs
+    from jejune_cli.component_registry import REGISTRY
     docs = _load_catalog_docs(catalog_file)
     if repo:
         docs = [d for d in docs if d["name"] == repo]
         if not docs:
             raise click.ClickException(f"Repository '{repo}' not found in catalog.")
-    eco_root, eco_tmp = resolve_dirs()
+    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
     n = sum(1 for _ in _iter_docs(docs, root, eco_tmp))
     click.echo(f"{n} repo(s) ready.")
@@ -482,7 +482,7 @@ def convert_test(catalog_file, root_dir, repo, no_cache, no_build):
     build-failed — image did not build
     skipped      — no DockerContext in this repo
     """
-    from jejune_cli.ecosystem import resolve_dirs
+    from jejune_cli.component_registry import REGISTRY
 
     docs = _load_catalog_docs(catalog_file)
     if repo:
@@ -490,7 +490,7 @@ def convert_test(catalog_file, root_dir, repo, no_cache, no_build):
         if not docs:
             raise click.ClickException(f"Repository '{repo}' not found in catalog.")
 
-    eco_root, eco_tmp = resolve_dirs()
+    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
 
     counts = {"unchanged": 0, "changed": 0, "build_failed": 0, "skipped": 0}
