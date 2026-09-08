@@ -15,7 +15,13 @@ from pathlib import Path
 import click
 import yaml
 
-from jejune_cli.role import detect_role as _detect_role, role_inherits as _role_inherits
+from jejune_cli.role import ROLE_REGISTRY as _ROLE_REGISTRY
+
+def _detect_role():
+    return _ROLE_REGISTRY.detect_role()
+
+def _role_inherits(role, parent):
+    return _ROLE_REGISTRY.role_inherits(role, parent)
 
 from ._impl import (
     _catalog_config_status,
@@ -49,15 +55,15 @@ class _CatalogGroup(click.Group):
     """Hides and blocks role-gated commands based on the active role."""
 
     def _is_collection_role(self) -> bool:
-        active_role, _ = _detect_role()
-        return active_role == _COLLECTION_ROLE
+        active_role = _detect_role()
+        return active_role.name == _COLLECTION_ROLE
 
     def _is_deployment_catalog_role(self) -> bool:
         """True for deployer (inherits deployment-catalog) and collection role."""
-        active_role, _ = _detect_role()
+        active_role = _detect_role()
         return (
             _role_inherits(active_role, _DEPLOYMENT_CATALOG_ROLE)
-            or active_role == _COLLECTION_ROLE
+            or active_role.name == _COLLECTION_ROLE
         )
 
     def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -145,8 +151,8 @@ def check(catalog_path, root_dir):
         if not _print_deployment_results(results):
             sys.exit(1)
     else:
-        active_role, _ = _detect_role()
-        if active_role != _COLLECTION_ROLE:
+        active_role = _detect_role()
+        if not active_role.name == _COLLECTION_ROLE:
             raise click.ClickException(
                 f"--catalog is only available for the {_COLLECTION_ROLE} role."
             )

@@ -57,9 +57,9 @@ def _check_availability() -> tuple[bool, str]:
     Error only when both a local copy and the clone attempt fail.
     """
     try:
-        from jejune_cli.role import detect_role, role_inherits
-        active_role, _ = detect_role()
-        if role_inherits(active_role, "deployment-catalog"):
+        from jejune_cli.role import ROLE_REGISTRY
+        active_role = ROLE_REGISTRY.detect_role()
+        if ROLE_REGISTRY.role_inherits(active_role, "deployment-catalog"):
             return _check_deployment_catalog_availability()
     except Exception:
         pass
@@ -89,12 +89,6 @@ def _check_availability() -> tuple[bool, str]:
 
     return False, f"could not access {_REPO_NAME} locally or via git clone"
 
-
-def _detect_catalog_contributor() -> bool:
-    try:
-        return Path.cwd().joinpath("full-catalog.yaml").exists()
-    except Exception:
-        return False
 
 
 # ---------------------------------------------------------------------------

@@ -19,16 +19,33 @@ Module layout:
   plugin.py        — role definitions, heuristic, plugin registration (this file)
 """
 
-from jejune_cli.role import register_role_repos
+from jejune_cli.role import ROLE_REGISTRY
 from jejune_cli.plugin import JejunePlugin, JejuneRole
-from jejune_cli.role import register_role as _register_role, register_role_help_section as _register_role_help_section
 
 from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
-from ._impl import _check_availability, _detect_catalog_contributor
+from ._impl import _check_availability
 
 from jejune_cli.convert import convert as _convert_group
 _convert_group.add_command(convert_test, "test")
+
+
+def _is_catalog_contributor_cwd() -> bool:
+    import subprocess
+    from pathlib import Path
+    cwd = Path.cwd()
+    if not (cwd / "catalog.yaml").is_file():
+        return False
+    if not (cwd / ".git").is_dir():
+        return False
+    try:
+        url = subprocess.check_output(
+            ["git", "remote", "get-url", "origin"],
+            cwd=cwd, stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") == "jejune_catalog"
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +68,8 @@ _deployment_catalog_role = JejuneRole(
     abstract=True,
     extend_includes={"deployer": ("deployment-catalog",)},
 )
-_register_role(_deployment_catalog_role)
-_register_role_help_section("deployment-catalog", stage="collection", order=95)
+ROLE_REGISTRY.register_from_plugin(_deployment_catalog_role)
+ROLE_REGISTRY.register_help_section("deployment-catalog", stage="collection", order=95)
 
 catalog_role = JejuneRole(
     name="catalog-contributor",
@@ -60,7 +77,7 @@ catalog_role = JejuneRole(
     includes=("contributor",),
     detection_reason="full-catalog.yaml detected",
     section_title="Catalog-contributor commands",
-    detect=_detect_catalog_contributor,
+    detect=_is_catalog_contributor_cwd,
     help_stage="collection",
     order=20,
     config_group=curator_config_group,
@@ -71,7 +88,10 @@ catalog_role = JejuneRole(
 # Plugin registration
 # ---------------------------------------------------------------------------
 
-register_role_repos("catalog-contributor", [("jejune_catalog", None, None)])
+from jejune_cli.component_base import base_comp as _base_comp
+_catalog_comp = _base_comp.registry.get("catalog")
+if _catalog_comp is not None:
+    _catalog_comp.repos = [("jejune_catalog", None, None)]
 
 plugin = JejunePlugin(
     name="catalog",
