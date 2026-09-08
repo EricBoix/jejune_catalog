@@ -57,7 +57,7 @@ def _check_availability() -> tuple[bool, str]:
     Error only when both a local copy and the clone attempt fail.
     """
     try:
-        from jejune_cli.role import ROLE_REGISTRY
+        from jejune_cli.role_registry import ROLE_REGISTRY
         active_role = ROLE_REGISTRY.detect_role()
         if ROLE_REGISTRY.role_inherits(active_role, "deployment-catalog"):
             return _check_deployment_catalog_availability()

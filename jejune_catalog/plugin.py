@@ -19,7 +19,7 @@ Module layout:
   plugin.py        — role definitions, heuristic, plugin registration (this file)
 """
 
-from jejune_cli.role import ROLE_REGISTRY
+from jejune_cli.role_registry import ROLE_REGISTRY
 from jejune_cli.plugin import JejunePlugin, JejuneRole
 
 from ._commands import catalog_group, convert_test
@@ -88,8 +88,8 @@ catalog_role = JejuneRole(
 # Plugin registration
 # ---------------------------------------------------------------------------
 
-from jejune_cli.component_base import base_comp as _base_comp
-_catalog_comp = _base_comp.registry.get("catalog")
+from jejune_cli.component_registry import REGISTRY as _REGISTRY
+_catalog_comp = _REGISTRY.get("catalog")
 if _catalog_comp is not None:
     _catalog_comp.repos = [("jejune_catalog", None, None)]
 

@@ -15,7 +15,7 @@ from pathlib import Path
 import click
 import yaml
 
-from jejune_cli.role import ROLE_REGISTRY as _ROLE_REGISTRY
+from jejune_cli.role_registry import ROLE_REGISTRY as _ROLE_REGISTRY
 
 def _detect_role():
     return _ROLE_REGISTRY.detect_role()
