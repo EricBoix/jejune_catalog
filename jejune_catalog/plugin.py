@@ -92,7 +92,7 @@ catalog_role = plugin_role_description(
 from jejune_cli.component_registry import REGISTRY as _REGISTRY
 _catalog_comp = _REGISTRY.get("catalog")
 if _catalog_comp is not None:
-    _catalog_comp.repos = [("jejune_catalog", None, None)]
+    _catalog_comp.repos = [(None, None)]
 
 plugin = plugin_description(
     name="catalog",
