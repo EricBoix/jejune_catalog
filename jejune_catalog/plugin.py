@@ -20,7 +20,8 @@ Module layout:
 """
 
 from jejune_cli.role_registry import ROLE_REGISTRY
-from jejune_cli.plugin import JejunePlugin, JejuneRole
+from jejune_cli.plugin_description import plugin_description
+from jejune_cli.plugin_role_description import plugin_role_description
 
 from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
@@ -56,7 +57,7 @@ def _is_catalog_contributor_cwd() -> bool:
 # check-deployment. catalog-contributor is handled by an explicit allow
 # in _commands._CatalogGroup, so it does NOT inherit deployment-catalog — this
 # avoids a duplicate catalog section in catalog-contributor --help.
-_deployment_catalog_role = JejuneRole(
+_deployment_catalog_role = plugin_role_description(
     name="deployment-catalog",
     components=frozenset({"catalog"}),
     includes=("contributor",),
@@ -71,7 +72,7 @@ _deployment_catalog_role = JejuneRole(
 ROLE_REGISTRY.register_from_plugin(_deployment_catalog_role)
 ROLE_REGISTRY.register_help_section("deployment-catalog", stage="collection", order=95)
 
-catalog_role = JejuneRole(
+catalog_role = plugin_role_description(
     name="catalog-contributor",
     components=frozenset({"catalog"}),
     includes=("contributor",),
@@ -93,9 +94,10 @@ _catalog_comp = _REGISTRY.get("catalog")
 if _catalog_comp is not None:
     _catalog_comp.repos = [("jejune_catalog", None, None)]
 
-plugin = JejunePlugin(
+plugin = plugin_description(
     name="catalog",
     group=catalog_group,
+    repo_name="jejune_catalog",
     avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
     check_availability=_check_availability,
     stage="collection",
