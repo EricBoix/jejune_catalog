@@ -97,7 +97,6 @@ if _catalog_comp is not None:
 plugin = plugin_description(
     name="catalog",
     group=catalog_group,
-    repo_name="jejune_catalog",
     avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
     check_availability=_check_availability,
     stage="collection",
