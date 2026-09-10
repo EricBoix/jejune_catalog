@@ -116,23 +116,32 @@ def _validate_catalog_entry(doc: object, index: int) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# GitHub helpers
+# Git helpers
 # ---------------------------------------------------------------------------
 
-def _gh_is_private(slug: str) -> tuple[bool | None, str]:
-    """Query GitHub via gh CLI; return (is_private, error_message)."""
+def _git_is_private(url: str) -> tuple[bool | None, str]:
+    """Probe a remote URL via git ls-remote; return (is_private, error_message).
+
+    Returns (False, "") when the remote is reachable (public or authenticated).
+    Returns (True, "") when git exits 128, which indicates the remote refused
+    anonymous access (error code 128: repository not found or access denied).
+    Returns (None, msg) for transient or unrecognized failures.
+    """
     try:
         result = subprocess.run(
-            ["gh", "repo", "view", slug, "--json", "isPrivate", "--jq", ".isPrivate"],
+            ["git", "ls-remote", "--exit-code", "--heads", url],
             capture_output=True, text=True, timeout=15,
         )
     except FileNotFoundError:
-        return None, "gh CLI not found"
+        return None, "git not found"
     except subprocess.TimeoutExpired:
-        return None, "gh query timed out"
-    if result.returncode != 0:
-        return None, result.stderr.strip() or "gh query failed"
-    return result.stdout.strip() == "true", ""
+        return None, "git ls-remote timed out"
+    if result.returncode == 0 or result.returncode == 2:
+        # 0 = refs found; 2 = no refs (empty repo) — both mean reachable
+        return False, ""
+    if result.returncode == 128:
+        return True, ""
+    return None, f"git ls-remote exited {result.returncode}: {result.stderr.strip()}"
 
 
 # ---------------------------------------------------------------------------
@@ -161,20 +170,17 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
         elif not (root_dir / name).is_dir():
             issues.append(f"not cloned under {root_dir}")
 
-        parts = url.split("/")
-        if len(parts) >= 2:
-            slug = f"{parts[-2]}/{parts[-1]}"
-            is_private, err = _gh_is_private(slug)
-            if err:
-                issues.append(err)
-            else:
-                actual_public = not is_private
-                if actual_public != expected_public:
-                    catalog_val = "public" if expected_public else "private"
-                    github_val = "public" if actual_public else "private"
-                    issues.append(
-                        f"visibility mismatch: catalog={catalog_val}, GitHub={github_val}"
-                    )
+        is_private, err = _git_is_private(url)
+        if err:
+            issues.append(err)
+        else:
+            actual_public = not is_private
+            if actual_public != expected_public:
+                catalog_val = "public" if expected_public else "private"
+                remote_val = "public" if actual_public else "private"
+                issues.append(
+                    f"visibility mismatch: catalog={catalog_val}, remote={remote_val}"
+                )
 
         results.append((name, not issues, "; ".join(issues) if issues else "ok"))
     return results
@@ -263,16 +269,11 @@ def _sync_catalog_impl(
             continue
 
         url = remote.stdout.strip().removesuffix(".git")
-        parts = url.split("/")
-        slug = f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else ""
 
-        if not slug:
-            results.append((name, False, f"unexpected remote URL: {url}"))
-            continue
-
-        is_private, err = _gh_is_private(slug)
+        is_private, err = _git_is_private(url)
         if err:
             results.append((name, False, err))
+            continue
         elif is_private:
             results.append((name, True, "private — add manually to deployment catalog if needed"))
         else:
