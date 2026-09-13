@@ -252,11 +252,9 @@ def _check_deployment_impl(
             f"ok ({label})" if not issues else "; ".join(issues),
         ))
 
-        if eco is not None:
+        if eco is not None and not local_only:
             tier, base = eco.repo_status(name, root_dir, tmp_dir)
             if tier == "remote":
-                if local_only:
-                    continue
                 try:
                     base = str(eco.ensure_local(name))
                 except Exception:
