@@ -254,10 +254,13 @@ def _check_deployment_impl(
 
         if eco is not None:
             tier, base = eco.repo_status(name, root_dir, tmp_dir)
-            if tier in ("root", "tmp"):
-                results.append(_check_doc_manifest(name, Path(base)))
-            else:
-                results.append((f"{name}/manifest.yaml", False, "repo not cloned locally; set JEJUNE_ROOT_DIR"))
+            if tier == "remote":
+                try:
+                    base = str(eco.ensure_local(name))
+                except Exception:
+                    results.append((f"{name}/manifest.yaml", False, "could not clone repo"))
+                    continue
+            results.append(_check_doc_manifest(name, Path(base)))
 
     return results
 
