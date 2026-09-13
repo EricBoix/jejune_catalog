@@ -186,12 +186,21 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
     return results
 
 
-def _check_doc_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
-    """Check manifest.yaml conformity for a locally-available doc repo."""
-    from jejune_cli.test import _check_doc_yaml
+def _check_manifest_slug(name: str, repo_dir: Path) -> tuple[str, bool, str]:
+    """Verify manifest.yaml by delegating slug generation to `jejune manifest slug`."""
     label = f"{name}/manifest.yaml"
-    errors, _ = _check_doc_yaml(repo_dir)
-    return (label, not errors, "ok" if not errors else "; ".join(errors))
+    manifest_path = repo_dir / "manifest.yaml"
+    if not manifest_path.exists():
+        return (label, False, "manifest.yaml not found")
+    result = subprocess.run(
+        ["jejune", "manifest", "slug", str(manifest_path)],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        slug = result.stdout.strip()
+        return (label, True, f"ok (slug: {slug})")
+    err = (result.stderr or result.stdout).strip()
+    return (label, False, err or "slug generation failed")
 
 
 def _check_deployment_impl(
@@ -250,7 +259,7 @@ def _check_deployment_impl(
                 except Exception:
                     results.append((f"{name}/manifest.yaml", False, "could not clone repo"))
                     continue
-            results.append(_check_doc_manifest(name, Path(base)))
+            results.append(_check_manifest_slug(name, Path(base)))
 
     return results
 
