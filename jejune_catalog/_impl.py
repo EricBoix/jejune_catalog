@@ -37,7 +37,7 @@ def _check_deployment_catalog_availability() -> tuple[bool, str]:
     """Return (ok, msg) for the deployment catalog.yaml in CWD."""
     cwd = Path.cwd()
     full_cat = cwd.parent.parent / _REPO_NAME / "full-catalog.yaml"
-    results = _check_deployment_impl(cwd, full_cat)
+    results = _check_deployment_impl(cwd, full_cat, local_only=True)
     failing = [item for item, ok, _ in results if not ok]
     if not failing:
         return True, "deployment catalog ok"
@@ -206,6 +206,7 @@ def _check_manifest_slug(name: str, repo_dir: Path) -> tuple[str, bool, str]:
 def _check_deployment_impl(
     deployment_path: Path,
     catalog_ref: Path,
+    local_only: bool = False,
 ) -> list[tuple[str, bool, str]]:
     """Validate a deployment catalog; return (item, ok, message)."""
     results: list[tuple[str, bool, str]] = []
@@ -254,6 +255,8 @@ def _check_deployment_impl(
         if eco is not None:
             tier, base = eco.repo_status(name, root_dir, tmp_dir)
             if tier == "remote":
+                if local_only:
+                    continue
                 try:
                     base = str(eco.ensure_local(name))
                 except Exception:
