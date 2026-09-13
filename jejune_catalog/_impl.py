@@ -188,20 +188,10 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
 
 def _check_doc_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
     """Check manifest.yaml conformity for a locally-available doc repo."""
-    manifest = repo_dir / "manifest.yaml"
+    from jejune_cli.test import _check_doc_yaml
     label = f"{name}/manifest.yaml"
-    if not manifest.exists():
-        return (label, False, "manifest.yaml missing")
-    data = yaml.safe_load(manifest.read_text()) or {}
-    issues: list[str] = []
-    if not data.get("slug"):
-        issues.append("missing 'slug' field")
-    turtle = data.get("turtle_file")
-    if not turtle:
-        issues.append("missing 'turtle_file' field")
-    elif not (repo_dir / turtle).exists():
-        issues.append(f"turtle_file '{turtle}' not found")
-    return (label, not issues, "ok" if not issues else "; ".join(issues))
+    errors, _ = _check_doc_yaml(repo_dir)
+    return (label, not errors, "ok" if not errors else "; ".join(errors))
 
 
 def _check_deployment_impl(
