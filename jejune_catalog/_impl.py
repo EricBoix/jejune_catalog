@@ -187,19 +187,11 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
 
 
 def _check_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
-    """Verify manifest.yaml exists and has a title field."""
+    """Validate manifest.yaml against the manifest schema."""
+    from jejune_cli.test import _check_doc_yaml
     label = f"{name}/manifest.yaml"
-    manifest_path = repo_dir / "manifest.yaml"
-    if not manifest_path.exists():
-        return (label, False, "manifest.yaml not found")
-    try:
-        doc = yaml.safe_load(manifest_path.read_text()) or {}
-    except Exception as exc:
-        return (label, False, f"invalid YAML: {exc}")
-    title = doc.get("title", "")
-    if not title or not isinstance(title, str):
-        return (label, False, "missing or empty 'title' field")
-    return (label, True, f"ok (title: {title!r})")
+    errors, _ = _check_doc_yaml(repo_dir)
+    return (label, not errors, "ok" if not errors else "; ".join(errors))
 
 
 def _check_deployment_impl(
