@@ -186,21 +186,20 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
     return results
 
 
-def _check_manifest_slug(name: str, repo_dir: Path) -> tuple[str, bool, str]:
-    """Verify manifest.yaml by delegating slug generation to `jejune manifest slug`."""
+def _check_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
+    """Verify manifest.yaml exists and has a title field."""
     label = f"{name}/manifest.yaml"
     manifest_path = repo_dir / "manifest.yaml"
     if not manifest_path.exists():
         return (label, False, "manifest.yaml not found")
-    result = subprocess.run(
-        ["jejune", "manifest", "slug", str(manifest_path)],
-        capture_output=True, text=True,
-    )
-    if result.returncode == 0:
-        slug = result.stdout.strip()
-        return (label, True, f"ok (slug: {slug})")
-    err = (result.stderr or result.stdout).strip()
-    return (label, False, err or "slug generation failed")
+    try:
+        doc = yaml.safe_load(manifest_path.read_text()) or {}
+    except Exception as exc:
+        return (label, False, f"invalid YAML: {exc}")
+    title = doc.get("title", "")
+    if not title or not isinstance(title, str):
+        return (label, False, "missing or empty 'title' field")
+    return (label, True, f"ok (title: {title!r})")
 
 
 def _check_deployment_impl(
@@ -252,15 +251,17 @@ def _check_deployment_impl(
             f"ok ({label})" if not issues else "; ".join(issues),
         ))
 
-        if eco is not None and not local_only:
+        if eco is not None:
             tier, base = eco.repo_status(name, root_dir, tmp_dir)
             if tier == "remote":
+                if local_only:
+                    continue
                 try:
                     base = str(eco.ensure_local(name))
                 except Exception:
                     results.append((f"{name}/manifest.yaml", False, "could not clone repo"))
                     continue
-            results.append(_check_manifest_slug(name, Path(base)))
+            results.append(_check_manifest(name, Path(base)))
 
     return results
 
