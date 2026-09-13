@@ -186,6 +186,39 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
     return results
 
 
+def _resolve_doc_repo(name: str, deployment_path: Path) -> Path | None:
+    """Return the local repo dir for a doc name, or None if not available locally."""
+    root = os.environ.get("JEJUNE_ROOT_DIR")
+    if root:
+        p = Path(root) / name
+        if p.is_dir():
+            return p
+    tmp = dot_jejune(deployment_path) / "tmp"
+    if tmp.is_dir():
+        p = tmp / name
+        if p.is_dir():
+            return p
+    return None
+
+
+def _check_doc_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
+    """Check manifest.yaml conformity for a locally-available doc repo."""
+    manifest = repo_dir / "manifest.yaml"
+    label = f"{name}/manifest.yaml"
+    if not manifest.exists():
+        return (label, False, "manifest.yaml missing")
+    data = yaml.safe_load(manifest.read_text()) or {}
+    issues: list[str] = []
+    if not data.get("slug"):
+        issues.append("missing 'slug' field")
+    turtle = data.get("turtle_file")
+    if not turtle:
+        issues.append("missing 'turtle_file' field")
+    elif not (repo_dir / turtle).exists():
+        issues.append(f"turtle_file '{turtle}' not found")
+    return (label, not issues, "ok" if not issues else "; ".join(issues))
+
+
 def _check_deployment_impl(
     deployment_path: Path,
     catalog_ref: Path,
@@ -229,6 +262,10 @@ def _check_deployment_impl(
             not issues,
             f"ok ({label})" if not issues else "; ".join(issues),
         ))
+
+        repo_dir = _resolve_doc_repo(name, deployment_path)
+        if repo_dir is not None:
+            results.append(_check_doc_manifest(name, repo_dir))
 
     return results
 
