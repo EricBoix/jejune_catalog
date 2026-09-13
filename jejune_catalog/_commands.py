@@ -144,7 +144,7 @@ def check(catalog_path, root_dir):
         if not (dep_path / "catalog.yaml").exists():
             raise click.ClickException(
                 "catalog.yaml not found in current directory — "
-                "for document manifests use `jejune manifest check`"
+                "for document manifests use `jejune manifest check-config`"
             )
         full_cat = dep_path.parent.parent / "jejune_catalog" / "full-catalog.yaml"
         results = _check_deployment_impl(dep_path, full_cat)
