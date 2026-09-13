@@ -186,21 +186,6 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
     return results
 
 
-def _resolve_doc_repo(name: str, deployment_path: Path) -> Path | None:
-    """Return the local repo dir for a doc name, or None if not available locally."""
-    root = os.environ.get("JEJUNE_ROOT_DIR")
-    if root:
-        p = Path(root) / name
-        if p.is_dir():
-            return p
-    tmp = dot_jejune(deployment_path) / "tmp"
-    if tmp.is_dir():
-        p = tmp / name
-        if p.is_dir():
-            return p
-    return None
-
-
 def _check_doc_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
     """Check manifest.yaml conformity for a locally-available doc repo."""
     manifest = repo_dir / "manifest.yaml"
@@ -239,6 +224,10 @@ def _check_deployment_impl(
             if isinstance(doc, dict) and "name" in doc:
                 ref_docs[doc["name"]] = doc
 
+    from jejune_cli.component_registry import REGISTRY
+    eco = REGISTRY.get("ecosystem")
+    root_dir, tmp_dir = eco.resolve_dirs(deployment_path) if eco is not None else (None, None)
+
     for i, doc in enumerate(yaml.safe_load(catalog_path.read_text()).get("documents", [])):
         schema_errors = _validate_catalog_entry(doc, i)
         if schema_errors:
@@ -263,9 +252,10 @@ def _check_deployment_impl(
             f"ok ({label})" if not issues else "; ".join(issues),
         ))
 
-        repo_dir = _resolve_doc_repo(name, deployment_path)
-        if repo_dir is not None:
-            results.append(_check_doc_manifest(name, repo_dir))
+        if eco is not None:
+            tier, base = eco.repo_status(name, root_dir, tmp_dir)
+            if tier in ("root", "tmp"):
+                results.append(_check_doc_manifest(name, Path(base)))
 
     return results
 
