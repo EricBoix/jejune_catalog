@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from jejune_cli._env import dot_jejune
+from jejune_cli.dot_jejune import dot_jejune
 
 
 _PLACEHOLDER = "_CHANGE_ME"
@@ -188,9 +188,9 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
 
 def _check_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
     """Validate manifest.yaml against the manifest schema."""
-    from jejune_cli.test import _check_doc_yaml
+    from jejune_cli.component_manifest import comp_manifest
     label = f"{name}/manifest.yaml"
-    errors, _ = _check_doc_yaml(repo_dir)
+    errors, _ = comp_manifest(repo_dir).check_manifest_referenced_files()
     return (label, not errors, "ok" if not errors else "; ".join(errors))
 
 
@@ -328,7 +328,6 @@ def _iter_docs(docs, root, eco_tmp):
     Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
     """
     from jejune_cli.component_registry import REGISTRY
-    from jejune_cli.test import _tmp_dir
 
     eco = REGISTRY.get("ecosystem")
     tmp = None
@@ -339,7 +338,7 @@ def _iter_docs(docs, root, eco_tmp):
             repo_dir = Path(base)
         else:
             if tmp is None:
-                tmp = _tmp_dir()
+                tmp = dot_jejune().tmp_dir()
             repo_dir = tmp / name
             if not repo_dir.exists():
                 print(f"Cloning {name} ...")

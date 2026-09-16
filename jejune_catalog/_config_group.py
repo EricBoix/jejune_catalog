@@ -9,7 +9,7 @@ from pathlib import Path
 
 import click
 
-from jejune_cli._env import dot_jejune
+from jejune_cli.dot_jejune import dot_jejune
 
 
 _TEMPLATES = Path(__file__).parent / "templates"
