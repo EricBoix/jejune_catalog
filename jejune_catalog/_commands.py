@@ -388,7 +388,7 @@ def check_deployment(deployment_path):
 
 
 # ---------------------------------------------------------------------------
-# Standalone command added to jejune_cli.convert.convert by plugin.py
+# Standalone command added to jejune_cli.click_convert.convert by plugin.py
 # ---------------------------------------------------------------------------
 
 def _load_catalog_docs(catalog_file):

@@ -27,7 +27,7 @@ from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
 from ._impl import _check_availability
 
-from jejune_cli.convert import convert as _convert_group
+from jejune_cli.click_convert import convert as _convert_group
 _convert_group.add_command(convert_test, "test")
 
 
