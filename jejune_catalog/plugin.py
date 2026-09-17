@@ -64,13 +64,10 @@ _deployment_catalog_role = plugin_role_description(
     detection_reason="inherited by deployer",
     section_title="Deployment-catalog commands",
     detect=lambda: False,
-    help_stage="collection",
-    order=95,
     abstract=True,
     extend_includes={"deployer": ("deployment-catalog",)},
 )
 ROLE_REGISTRY.register_from_plugin(_deployment_catalog_role)
-ROLE_REGISTRY.register_help_section("deployment-catalog", stage="collection", order=95)
 
 catalog_role = plugin_role_description(
     name="catalog-contributor",
@@ -79,8 +76,6 @@ catalog_role = plugin_role_description(
     detection_reason="full-catalog.yaml detected",
     section_title="Catalog-contributor commands",
     detect=_is_catalog_contributor_cwd,
-    help_stage="collection",
-    order=20,
     config_group=curator_config_group,
 )
 
@@ -94,6 +89,6 @@ plugin = plugin_description(
     group=catalog_group,
     avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
     check_availability=_check_availability,
-    stage="collection",
+    target_role="catalog-contributor",
     role=catalog_role,
 )
