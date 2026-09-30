@@ -1,14 +1,13 @@
-"""Pure-Python business logic for catalog operations.
-
-No Click dependency — all functions are independently testable.
-"""
+"""Business logic for catalog operations."""
 
 import os
 import subprocess
 from pathlib import Path
 
+import click
 import yaml
 
+from jejune_cli.app_context import AppContext
 from jejune_cli.dot_jejune import dot_jejune
 
 
@@ -57,14 +56,15 @@ def _check_availability() -> tuple[bool, str]:
     Error only when both a local copy and the clone attempt fail.
     """
     try:
-        from jejune_cli.role_registry import ROLE_REGISTRY
-        active_role = ROLE_REGISTRY.detect_role()
-        if ROLE_REGISTRY.role_inherits(active_role, "deployment-catalog"):
-            return _check_deployment_catalog_availability()
+        ctx = click.get_current_context(silent=True)
+        if ctx is not None:
+            app = ctx.find_object(AppContext)
+            if app is not None:
+                active_role = app.role_registry.detect_role()
+                if app.role_registry.role_inherits(active_role, "deployment-catalog"):
+                    return _check_deployment_catalog_availability()
     except Exception:
         pass
-
-    from jejune_cli._git_server_config import REPO_ROOT_DIR
 
     raw_root = os.environ.get(_CONFIG_VAR, "")
     if raw_root and _PLACEHOLDER not in raw_root:
@@ -77,9 +77,19 @@ def _check_availability() -> tuple[bool, str]:
     clone_dest = dot_jejune() / "tmp" / _REPO_NAME
     try:
         clone_dest.parent.mkdir(parents=True, exist_ok=True)
+        ctx = click.get_current_context(silent=True)
+        repo_root_dir = None
+        if ctx is not None:
+            app = ctx.find_object(AppContext)
+            if app is not None:
+                git_server = app.component_registry.get("git-server")
+                if git_server is not None:
+                    repo_root_dir = git_server.repo_root_dir()
+        if repo_root_dir is None:
+            return False, f"could not access {_REPO_NAME} locally or via git clone"
         result = subprocess.run(
             ["git", "clone", "--depth=1",
-             f"{REPO_ROOT_DIR}/{_REPO_NAME}", str(clone_dest)],
+             f"{repo_root_dir}/{_REPO_NAME}", str(clone_dest)],
             capture_output=True, text=True, timeout=60,
         )
         if result.returncode == 0:
@@ -215,8 +225,8 @@ def _check_deployment_impl(
             if isinstance(doc, dict) and "name" in doc:
                 ref_docs[doc["name"]] = doc
 
-    from jejune_cli.component_registry import REGISTRY
-    eco = REGISTRY.get("ecosystem")
+    ctx = click.get_current_context(silent=True)
+    eco = ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
     root_dir, tmp_dir = eco.resolve_dirs(deployment_path) if eco is not None else (None, None)
 
     for i, doc in enumerate(yaml.safe_load(catalog_path.read_text()).get("documents", [])):
@@ -327,9 +337,8 @@ def _iter_docs(docs, root, eco_tmp):
     Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
     Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
     """
-    from jejune_cli.component_registry import REGISTRY
-
-    eco = REGISTRY.get("ecosystem")
+    ctx = click.get_current_context(silent=True)
+    eco = ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
     tmp = None
     for doc in docs:
         name, url = doc["name"], doc["url"]

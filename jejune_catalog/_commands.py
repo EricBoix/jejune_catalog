@@ -14,13 +14,13 @@ from pathlib import Path
 import click
 import yaml
 
-from jejune_cli.role_registry import ROLE_REGISTRY as _ROLE_REGISTRY
+from jejune_cli.app_context import AppContext
 
 def _detect_role():
-    return _ROLE_REGISTRY.detect_role()
+    return click.get_current_context().find_object(AppContext).role_registry.detect_role()
 
 def _role_inherits(role, parent):
-    return _ROLE_REGISTRY.role_inherits(role, parent)
+    return click.get_current_context().find_object(AppContext).role_registry.role_inherits(role, parent)
 
 from ._impl import (
     _catalog_config_status,
@@ -211,12 +211,11 @@ def catalog_test(catalog_file, root_dir, repo, verbose):
     For each repository, manifest.yaml is parsed and every file it references is
     checked for existence. Exits with a non-zero status if any check fails.
     """
-    from jejune_cli.component_registry import REGISTRY
     from jejune_cli.test import _check_doc_yaml
 
     docs = _load_catalog_docs(catalog_file)
-
-    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
+    app = click.get_current_context().find_object(AppContext)
+    eco_root, eco_tmp = app.component_registry.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
 
     if repo:
@@ -257,13 +256,13 @@ def _do_catalog_install(
     root_dir: str | None = None,
     repo: str | None = None,
 ) -> None:
-    from jejune_cli.component_registry import REGISTRY
     docs = _load_catalog_docs(catalog_file)
     if repo:
         docs = [d for d in docs if d["name"] == repo]
         if not docs:
             raise click.ClickException(f"Repository '{repo}' not found in catalog.")
-    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
+    app = click.get_current_context().find_object(AppContext)
+    eco_root, eco_tmp = app.component_registry.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
     n = sum(1 for _ in _iter_docs(docs, root, eco_tmp))
     click.echo(f"{n} repo(s) ready.")
@@ -425,15 +424,13 @@ def convert_test(catalog_file, root_dir, repo, no_cache, no_build):
     build-failed — image did not build
     skipped      — no DockerContext in this repo
     """
-    from jejune_cli.component_registry import REGISTRY
-
     docs = _load_catalog_docs(catalog_file)
     if repo:
         docs = [d for d in docs if d["name"] == repo]
         if not docs:
             raise click.ClickException(f"Repository '{repo}' not found in catalog.")
-
-    eco_root, eco_tmp = REGISTRY.get("ecosystem").resolve_dirs()
+    app = click.get_current_context().find_object(AppContext)
+    eco_root, eco_tmp = app.component_registry.get("ecosystem").resolve_dirs()
     root = Path(root_dir) if root_dir and Path(root_dir).is_dir() else eco_root
 
     counts = {"unchanged": 0, "changed": 0, "build_failed": 0, "skipped": 0}

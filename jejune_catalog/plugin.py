@@ -19,7 +19,6 @@ Module layout:
   plugin.py        — role definitions, heuristic, plugin registration (this file)
 """
 
-from jejune_cli.role_registry import ROLE_REGISTRY
 from jejune_cli.plugin_description import plugin_description
 from jejune_cli.plugin_role_description import plugin_role_description
 
@@ -27,7 +26,7 @@ from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
 from ._impl import _check_availability
 
-from jejune_cli.click_convert import convert as _convert_group
+from jejune_cli.click_cont_comp_convert import convert as _convert_group
 _convert_group.add_command(convert_test, "test")
 
 
@@ -67,8 +66,6 @@ _deployment_catalog_role = plugin_role_description(
     abstract=True,
     extend_includes={"deployer": ("deployment-catalog",)},
 )
-ROLE_REGISTRY.register_from_plugin(_deployment_catalog_role)
-
 catalog_role = plugin_role_description(
     name="catalog-contributor",
     components=frozenset({"catalog"}),
@@ -90,5 +87,6 @@ plugin = plugin_description(
     avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
     check_availability=_check_availability,
     target_role="catalog-contributor",
+    roles=[_deployment_catalog_role],
     role=catalog_role,
 )
