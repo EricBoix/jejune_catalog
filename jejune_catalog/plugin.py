@@ -19,7 +19,7 @@ Module layout:
   plugin.py        — role definitions, heuristic, plugin registration (this file)
 """
 
-from jejune_cli.plugin_description import plugin_description
+from jejune_cli.plugin_description import PluginDescription
 from jejune_cli.plugin_role_description import plugin_role_description
 
 from ._commands import catalog_group, convert_test
@@ -27,12 +27,14 @@ from ._config_group import curator_config_group
 from ._impl import _check_availability
 
 from jejune_cli.click_cont_comp_convert import convert as _convert_group
+
 _convert_group.add_command(convert_test, "test")
 
 
 def _is_catalog_contributor_cwd() -> bool:
     import subprocess
     from pathlib import Path
+
     cwd = Path.cwd()
     if not (cwd / "catalog.yaml").is_file():
         return False
@@ -41,9 +43,13 @@ def _is_catalog_contributor_cwd() -> bool:
     try:
         url = subprocess.check_output(
             ["git", "remote", "get-url", "origin"],
-            cwd=cwd, stderr=subprocess.DEVNULL, text=True,
+            cwd=cwd,
+            stderr=subprocess.DEVNULL,
+            text=True,
         ).strip()
-        return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") == "jejune_catalog"
+        return (
+            url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") == "jejune_catalog"
+        )
     except Exception:
         return False
 
@@ -81,7 +87,7 @@ catalog_role = plugin_role_description(
 # Plugin registration
 # ---------------------------------------------------------------------------
 
-plugin = plugin_description(
+plugin = PluginDescription(
     name="catalog",
     group=catalog_group,
     avail_hint="check network — jejune_catalog is a public repo and cloned automatically",
