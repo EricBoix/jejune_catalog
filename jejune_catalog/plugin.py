@@ -20,7 +20,7 @@ Module layout:
 """
 
 from jejune_cli.plugin_description import PluginDescription
-from jejune_cli.plugin_role_description import plugin_role_description
+from jejune_cli.plugin_role_description import PluginRoleDescription
 
 from ._commands import catalog_group, convert_test
 from ._config_group import curator_config_group
@@ -62,7 +62,7 @@ def _is_catalog_contributor_cwd() -> bool:
 # check-deployment. catalog-contributor is handled by an explicit allow
 # in _commands._CatalogGroup, so it does NOT inherit deployment-catalog — this
 # avoids a duplicate catalog section in catalog-contributor --help.
-_deployment_catalog_role = plugin_role_description(
+_deployment_catalog_role = PluginRoleDescription(
     name="deployment-catalog",
     components=frozenset({"catalog"}),
     includes=("contributor",),
@@ -72,7 +72,7 @@ _deployment_catalog_role = plugin_role_description(
     abstract=True,
     extend_includes={"deployer": ("deployment-catalog",)},
 )
-catalog_role = plugin_role_description(
+catalog_role = PluginRoleDescription(
     name="catalog-contributor",
     components=frozenset({"catalog"}),
     includes=("contributor",),

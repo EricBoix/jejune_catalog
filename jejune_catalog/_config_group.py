@@ -9,8 +9,7 @@ from pathlib import Path
 
 import click
 
-from jejune_cli.dot_jejune import dot_jejune
-
+from jejune_cli.dot_jejune import DotJejune
 
 _TEMPLATES = Path(__file__).parent / "templates"
 _ECOSYSTEM_TEMPLATE = Path(__file__).parent / "templates" / "ecosystem-env-config"
@@ -25,7 +24,7 @@ def curator_init() -> None:
     """
     from jejune_cli.next_steps import print_next_steps
 
-    d = dot_jejune()
+    d = DotJejune()
     d.mkdir(exist_ok=True)
 
     created = []
@@ -59,7 +58,9 @@ def curator_init() -> None:
     print_next_steps()
 
 
-@click.group("catalog-contributor", short_help="Collection-catalog-contributor role workspace")
+@click.group(
+    "catalog-contributor", short_help="Collection-catalog-contributor role workspace"
+)
 def curator_config_group():
     """Initialise and inspect the catalog-contributor workspace."""
 

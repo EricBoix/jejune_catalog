@@ -8,8 +8,7 @@ import click
 import yaml
 
 from jejune_cli.app_context import AppContext
-from jejune_cli.dot_jejune import dot_jejune
-
+from jejune_cli.dot_jejune import DotJejune
 
 _PLACEHOLDER = "_CHANGE_ME"
 _CONFIG_VAR = "JEJUNE_ROOT_DIR"
@@ -21,6 +20,7 @@ _CATALOG_SCHEMA_PATH = Path(__file__).parent / "schema" / "catalog.yaml"
 # ---------------------------------------------------------------------------
 # Configuration helpers
 # ---------------------------------------------------------------------------
+
 
 def _catalog_config_status() -> tuple[str, str]:
     """Return (status, raw_msg) for catalog configuration."""
@@ -71,10 +71,10 @@ def _check_availability() -> tuple[bool, str]:
         if (Path(raw_root) / _REPO_NAME / "full-catalog.yaml").exists():
             return True, f"full-catalog.yaml found under {_CONFIG_VAR}"
 
-    if (dot_jejune() / "tmp" / _REPO_NAME / "full-catalog.yaml").exists():
+    if (DotJejune() / "tmp" / _REPO_NAME / "full-catalog.yaml").exists():
         return True, "full-catalog.yaml available via .jejune/tmp"
 
-    clone_dest = dot_jejune() / "tmp" / _REPO_NAME
+    clone_dest = DotJejune() / "tmp" / _REPO_NAME
     try:
         clone_dest.parent.mkdir(parents=True, exist_ok=True)
         ctx = click.get_current_context(silent=True)
@@ -88,9 +88,16 @@ def _check_availability() -> tuple[bool, str]:
         if repo_root_dir is None:
             return False, f"could not access {_REPO_NAME} locally or via git clone"
         result = subprocess.run(
-            ["git", "clone", "--depth=1",
-             f"{repo_root_dir}/{_REPO_NAME}", str(clone_dest)],
-            capture_output=True, text=True, timeout=60,
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                f"{repo_root_dir}/{_REPO_NAME}",
+                str(clone_dest),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if result.returncode == 0:
             return True, f"cloned {_REPO_NAME} into .jejune/tmp"
@@ -100,10 +107,10 @@ def _check_availability() -> tuple[bool, str]:
     return False, f"could not access {_REPO_NAME} locally or via git clone"
 
 
-
 # ---------------------------------------------------------------------------
 # Deployment catalog schema validation
 # ---------------------------------------------------------------------------
+
 
 def _validate_catalog_entry(doc: object, index: int) -> list[str]:
     """Validate one entry against the deployment catalog schema; return error strings."""
@@ -129,6 +136,7 @@ def _validate_catalog_entry(doc: object, index: int) -> list[str]:
 # Git helpers
 # ---------------------------------------------------------------------------
 
+
 def _git_is_private(url: str) -> tuple[bool | None, str]:
     """Probe a remote URL via git ls-remote; return (is_private, error_message).
 
@@ -140,7 +148,9 @@ def _git_is_private(url: str) -> tuple[bool | None, str]:
     try:
         result = subprocess.run(
             ["git", "ls-remote", "--exit-code", "--heads", url],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
     except FileNotFoundError:
         return None, "git not found"
@@ -158,7 +168,10 @@ def _git_is_private(url: str) -> tuple[bool | None, str]:
 # Catalog operation implementations
 # ---------------------------------------------------------------------------
 
-def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str, bool, str]]:
+
+def _check_catalog_impl(
+    catalog: Path, root_dir: Path | None
+) -> list[tuple[str, bool, str]]:
     """Check each catalog entry for visibility and local clone; return (name, ok, message)."""
     if not catalog.exists():
         return [("catalog.yaml", False, f"not found: {catalog}")]
@@ -198,9 +211,10 @@ def _check_catalog_impl(catalog: Path, root_dir: Path | None) -> list[tuple[str,
 
 def _check_manifest(name: str, repo_dir: Path) -> tuple[str, bool, str]:
     """Validate manifest.yaml against the manifest schema."""
-    from jejune_cli.component_manifest import comp_manifest
+    from jejune_cli.component_manifest import CompManifest
+
     label = f"{name}/manifest.yaml"
-    errors, _ = comp_manifest(repo_dir).check_manifest_referenced_files()
+    errors, _ = CompManifest(repo_dir).check_manifest_referenced_files()
     return (label, not errors, "ok" if not errors else "; ".join(errors))
 
 
@@ -226,10 +240,16 @@ def _check_deployment_impl(
                 ref_docs[doc["name"]] = doc
 
     ctx = click.get_current_context(silent=True)
-    eco = ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
-    root_dir, tmp_dir = eco.resolve_dirs(deployment_path) if eco is not None else (None, None)
+    eco = (
+        ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
+    )
+    root_dir, tmp_dir = (
+        eco.resolve_dirs(deployment_path) if eco is not None else (None, None)
+    )
 
-    for i, doc in enumerate(yaml.safe_load(catalog_path.read_text()).get("documents", [])):
+    for i, doc in enumerate(
+        yaml.safe_load(catalog_path.read_text()).get("documents", [])
+    ):
         schema_errors = _validate_catalog_entry(doc, i)
         if schema_errors:
             label = doc.get("name") if isinstance(doc, dict) else None
@@ -247,11 +267,13 @@ def _check_deployment_impl(
             issues.append("not found in reference catalog")
 
         label = "public" if doc.get("public") else "private"
-        results.append((
-            name,
-            not issues,
-            f"ok ({label})" if not issues else "; ".join(issues),
-        ))
+        results.append(
+            (
+                name,
+                not issues,
+                f"ok ({label})" if not issues else "; ".join(issues),
+            )
+        )
 
         if eco is not None:
             tier, base = eco.repo_status(name, root_dir, tmp_dir)
@@ -261,7 +283,9 @@ def _check_deployment_impl(
                 try:
                     base = str(eco.ensure_local(name))
                 except Exception:
-                    results.append((f"{name}/manifest.yaml", False, "could not clone repo"))
+                    results.append(
+                        (f"{name}/manifest.yaml", False, "could not clone repo")
+                    )
                     continue
             results.append(_check_manifest(name, Path(base)))
 
@@ -297,7 +321,8 @@ def _sync_catalog_impl(
 
         remote = subprocess.run(
             ["git", "-C", str(repo_dir), "remote", "get-url", "origin"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if remote.returncode != 0:
             results.append((name, False, "no git remote"))
@@ -310,7 +335,9 @@ def _sync_catalog_impl(
             results.append((name, False, err))
             continue
         elif is_private:
-            results.append((name, True, "private — add manually to deployment catalog if needed"))
+            results.append(
+                (name, True, "private — add manually to deployment catalog if needed")
+            )
         else:
             results.append((name, False, "public repo missing from catalog"))
             to_add.append((name, url))
@@ -331,6 +358,7 @@ def _sync_catalog_impl(
 # Catalog document iteration (shared by convert-test and future commands)
 # ---------------------------------------------------------------------------
 
+
 def _iter_docs(docs, root, eco_tmp):
     """Yield (name, url, repo_dir) for each catalog entry.
 
@@ -338,7 +366,9 @@ def _iter_docs(docs, root, eco_tmp):
     Resolution order: JEJUNE_ROOT_DIR → .jejune/tmp → clone into .jejune/tmp.
     """
     ctx = click.get_current_context(silent=True)
-    eco = ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
+    eco = (
+        ctx.find_object(AppContext).component_registry.get("ecosystem") if ctx else None
+    )
     tmp = None
     for doc in docs:
         name, url = doc["name"], doc["url"]
@@ -347,7 +377,7 @@ def _iter_docs(docs, root, eco_tmp):
             repo_dir = Path(base)
         else:
             if tmp is None:
-                tmp = dot_jejune().tmp_dir()
+                tmp = DotJejune().tmp_dir()
             repo_dir = tmp / name
             if not repo_dir.exists():
                 print(f"Cloning {name} ...")
@@ -365,7 +395,7 @@ _DOC_PREFIX = "jejune_doc_"
 def _docker_image_name(repo_dir: Path) -> str:
     name = repo_dir.resolve().name
     if name.startswith(_DOC_PREFIX):
-        name = name[len(_DOC_PREFIX):]
+        name = name[len(_DOC_PREFIX) :]
     return f"jejune:convert_{name}" if name else "jejune:convert"
 
 
@@ -387,8 +417,18 @@ def _convert_test_doc(
     if not no_build:
         extra = ["--no-cache"] if no_cache else []
         r = subprocess.run(
-            ["docker", "build", *extra, "-t", image, "-f", str(dockerfile), str(context)],
-            capture_output=True, text=True,
+            [
+                "docker",
+                "build",
+                *extra,
+                "-t",
+                image,
+                "-f",
+                str(dockerfile),
+                str(context),
+            ],
+            capture_output=True,
+            text=True,
         )
         if r.returncode != 0:
             tail = (r.stderr or r.stdout).strip().splitlines()
@@ -402,4 +442,8 @@ def _convert_test_doc(
     r = subprocess.run(
         ["docker", "run", "--rm", image, "--test"], capture_output=True, text=True
     )
-    return ("unchanged", "tests passed") if r.returncode == 0 else ("changed", "tests failed")
+    return (
+        ("unchanged", "tests passed")
+        if r.returncode == 0
+        else ("changed", "tests failed")
+    )
