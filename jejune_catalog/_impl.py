@@ -61,7 +61,7 @@ def _check_availability() -> tuple[bool, str]:
             app = ctx.find_object(AppContext)
             if app is not None:
                 active_role = app.role_registry.detect_role()
-                if app.role_registry.role_inherits(active_role, "deployment-catalog"):
+                if app.role_registry.role_is_deployment_catalog_family(active_role):
                     return _check_deployment_catalog_availability()
     except Exception:
         pass
